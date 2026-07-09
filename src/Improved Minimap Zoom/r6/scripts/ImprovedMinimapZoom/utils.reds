@@ -35,6 +35,8 @@ public class ZoomCalc {
 }
 
 public static func IMZLog(message: String) -> Void {
+  // Uncomment for diagnostics — output lands in the CET console (Game Log tab)
+  // and in bin/x64/plugins/cyber_engine_tweaks/gamelog.log
   // LogChannel(n"DEBUG", "IMZ: " + message);
 }
 
