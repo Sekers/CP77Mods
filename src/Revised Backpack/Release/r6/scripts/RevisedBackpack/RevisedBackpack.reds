@@ -1,4 +1,4 @@
-// RevisedBackpack v0.9.14
+// RevisedBackpack v0.9.15
 module RevisedBackpack
 
 import Codeware.UI.HubTextInput
@@ -4631,6 +4631,15 @@ public abstract class RevisedBackpackUtils {
       NotEquals(type, gamedataItemType.Con_Skillbook) &&
       NotEquals(type, gamedataItemType.Gen_MoneyShard) &&
       NotEquals(type, gamedataItemType.Gen_CraftingMaterial) &&
+      NotEquals(type, gamedataItemType.Cyb_Ability) &&
+      NotEquals(type, gamedataItemType.Cyb_HealingAbility) &&
+      NotEquals(type, gamedataItemType.Cyb_Launcher) &&
+      NotEquals(type, gamedataItemType.Cyb_MantisBlades) &&
+      NotEquals(type, gamedataItemType.Cyb_NanoWires) &&
+      NotEquals(type, gamedataItemType.Cyb_StrongArms) &&
+      NotEquals(type, gamedataItemType.Cyberware) &&
+      NotEquals(type, gamedataItemType.CyberwareStatsShard) &&
+      NotEquals(type, gamedataItemType.CyberwareUpgradeShard) &&
       !InventoryDataManagerV2.IsAttachmentType(type) &&
     true;
   }
