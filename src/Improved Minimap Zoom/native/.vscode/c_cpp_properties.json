@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}",
+                "${workspaceFolder}/Plugins",
+                "${workspaceFolder}/build/_deps/red4extsdk-src/include"
+            ],
+            "defines": [
+                "_WINDOWS",
+                "WIN32_LEAN_AND_MEAN",
+                "LOG_DEBUG=0"
+            ],
+            "windowsSdkVersion": "10.0",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "windows-msvc-x64"
+        }
+    ],
+    "version": 4
+}

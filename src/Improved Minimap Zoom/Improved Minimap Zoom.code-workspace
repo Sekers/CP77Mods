@@ -1,0 +1,12 @@
+{
+    "folders": [
+        {
+            "name": "CP77Mods",
+            "path": "../.."
+        },
+        {
+            "name": "IMZ Native Plugin",
+            "path": "native"
+        }
+    ]
+}

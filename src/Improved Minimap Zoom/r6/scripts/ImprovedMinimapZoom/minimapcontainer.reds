@@ -81,6 +81,17 @@ public let imzTargetZoom: Float;
 @addField(MinimapContainerController)
 public let imzPeekActive: Bool;
 
+// Displayed zoom at the moment peek was pressed — floor for the release
+// waypoint so a rapid release mid-motion cannot dip below the starting zoom.
+// Only consulted within 0.5s of the press (imzPeekPressTime): after that the
+// press motion has settled and the value may be stale (the player can walk
+// into a different-zoom area while holding peek).
+@addField(MinimapContainerController)
+public let imzPeekBaseZoom: Float;
+
+@addField(MinimapContainerController)
+public let imzPeekPressTime: Float;
+
 // Track actual mounted state (used to block manual peek while driving)
 @addField(MinimapContainerController)
 public let imzIsActuallyMounted: Bool;
@@ -207,14 +218,15 @@ public func GetZoomForZone_IMZ(zone: Int32) -> Float {
   return result;
 }
 
-// Flatten value (peek offset included) for the swap window, read from config —
-// never from the visionRadius fields, which may already be flattened.
+// FALLBACK waypoint (peek offset included) for the swap window, used only if
+// the native plugin's live-radius read fails. Read from config — never from
+// the visionRadius fields, which may already be flattened.
 // The interior bucket is selected by the engine's interior flag, NOT the
 // security zone: many interiors are Public/Default zones. Near doorways the
 // flag extends outside while the minimap still displays the exterior zoom, and
 // that mismatch is undetectable from script (no readable minimap state in
-// 1.63) — so for flag-true spots we flatten to min(interior, exterior) + peek
-// for BOTH press and release: exact for real interiors, and monotonic (no
+// 1.63 RTTI) — so for flag-true spots we flatten to min(interior, exterior) +
+// peek for BOTH press and release: exact for real interiors, and monotonic (no
 // overshoot dip) for the wrongly flagged doorway strips. The restore recompute
 // always lands on the engine's own correct value either way.
 @addMethod(MinimapContainerController)
@@ -314,8 +326,10 @@ protected cb func OnPlayerAttach(playerGameObject: ref<GameObject>) -> Bool {
   this.imzPeekActive = false;
   this.SetPreconfiguredZoomValues_IMZ();
 
-  // Seed from the actual zone (the player may load a save indoors)
-  this.imzCurrentZoom = this.GetZoomForZone_IMZ(this.imzPlayer.GetRealZone_IMZ());
+  // Seed from the actual displayed zoom (exact); fall back to the zone-based
+  // guess if the native read is unavailable this early in initialization
+  let liveZoom: Float = IMZ_GetMinimapRadius(this);
+  this.imzCurrentZoom = liveZoom > 0.0 ? liveZoom : this.GetZoomForZone_IMZ(this.imzPlayer.GetRealZone_IMZ());
   this.imzTargetZoom = this.imzCurrentZoom;
 
   playerGameObject.RegisterInputListener(this, IMZAction());
@@ -354,10 +368,34 @@ protected cb func OnAction(action: ListenerAction, consumer: ListenerActionConsu
     if NotEquals(prevPeek, this.imzPeekActive) {
       // Flatten ALL buckets to one waypoint value for the swap window so the
       // mode detour during the Safe<->Default flip has no zoom consequence.
-      // A wrong waypoint (quest areas, doorway strips) only bends the first
-      // 0.05s of motion: the restore handler writes per-bucket values back
-      // before the zone flips home, so the engine always lands correctly.
-      this.imzTargetZoom = this.GetPeekFlattenValue_IMZ(this.imzPlayer.GetRealZone_IMZ(), this.imzPlayer.GetRealCombat_IMZ());
+      // The waypoint comes from the LIVE displayed radius (read from native
+      // memory by the Improved Minimap Zoom Native plugin), so the motion is
+      // exact everywhere — doorway strips and quest areas included. If the
+      // read fails (<= 0), fall back to the config-based guess; either way
+      // the restore handler writes per-bucket values back before the zone
+      // flips home, so the engine always lands correctly.
+      let liveZoom: Float = IMZ_GetMinimapRadius(this);
+      if liveZoom > 0.0 {
+        if this.imzPeekActive {
+          this.imzPeekBaseZoom = liveZoom;
+          this.imzPeekPressTime = EngineTime.ToFloat(GameInstance.GetSimTime(this.imzPlayer.GetGame()));
+          this.imzTargetZoom = liveZoom + this.imzConfig.peek;
+        } else {
+          let sincePress: Float = EngineTime.ToFloat(GameInstance.GetSimTime(this.imzPlayer.GetGame())) - this.imzPeekPressTime;
+          if sincePress < 0.5 {
+            // Rapid tap: the press motion may still be in flight — don't let
+            // the release waypoint dip below the starting zoom
+            this.imzTargetZoom = MaxF(liveZoom - this.imzConfig.peek, this.imzPeekBaseZoom);
+          } else {
+            // Settled hold: live - peek is exact for wherever the player is
+            // now (they may have walked into a different-zoom area meanwhile,
+            // making the press-time floor stale)
+            this.imzTargetZoom = liveZoom - this.imzConfig.peek;
+          };
+        };
+      } else {
+        this.imzTargetZoom = this.GetPeekFlattenValue_IMZ(this.imzPlayer.GetRealZone_IMZ(), this.imzPlayer.GetRealCombat_IMZ());
+      };
       this.SetAllZoomsToCurrentValue_IMZ(this.imzTargetZoom);
       this.imzCurrentZoom = this.imzTargetZoom;
 
@@ -377,4 +415,13 @@ protected cb func OnAction(action: ListenerAction, consumer: ListenerActionConsu
 @addMethod(MinimapContainerController)
 protected cb func OnRefreshZoomConfigsEvent(evt: ref<RefreshZoomConfigsEvent>) -> Void {
   this.imzConfig = new ZoomConfig();
+
+  // Apply the (possibly changed) settings to the minimap immediately so the
+  // displayed zoom never sits on stale values. Without this, the first peek
+  // after a settings change reads the stale displayed radius and visibly
+  // re-aims mid-motion once. Skipped while driving: dynamic zoom owns the
+  // buckets there and rewrites them on every speed update anyway.
+  if !this.imzIsActuallyMounted && IsDefined(this.imzPlayer) {
+    this.SetPreconfiguredZoomValues_IMZ();
+  };
 }

@@ -62,10 +62,13 @@ public func ForceMinimapRefreshWithFakeZone(opt restoreBucketsAfter: Bool) -> Vo
   event.realZone = realZone;
   event.restoreBuckets = restoreBucketsAfter;
 
-  // Peek swaps (restoreBucketsAfter) restore fast so any wrong-guess bend at
-  // ambiguous spots (doorways) is too brief to notice; driving/unmount
-  // refreshes keep the original proven timing
-  let restoreDelay: Float = restoreBucketsAfter ? 0.05 : 0.1;
+  // Peek swaps (restoreBucketsAfter) use a short window that must still span
+  // at least one rendered frame so the engine sees the faked zone; 0.08s
+  // covers down to ~12fps. Because the peek waypoint comes from the live
+  // displayed radius, the restore landing is collinear with the motion and
+  // the window length has no visible effect. Driving/unmount refreshes keep
+  // the original proven timing.
+  let restoreDelay: Float = restoreBucketsAfter ? 0.08 : 0.1;
 
   GameInstance.GetDelaySystem(this.GetGame())
     .DelayEvent(this, event, restoreDelay);
