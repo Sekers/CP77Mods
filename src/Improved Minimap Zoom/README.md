@@ -34,5 +34,5 @@ r6/        redscript sources + Input Loader hotkey mapping
 
 ## Credits
 
-- **djkovrik** — the original Improved Minimap Zoom mod
-- **Legacy2077** — Community hotfixes maintained on this fork
+- **djkovrik** — The original Improved Minimap Zoom mod ([v1.7.7](https://github.com/Sekers/CP77Mods/releases/tag/Improved-Minimap-Zoom-1.7.7); the last Cyberpunk 2077 Legacy compatible version).
+- **Legacy2077** — Community hotfixes based off of mod version v1.7.7.
