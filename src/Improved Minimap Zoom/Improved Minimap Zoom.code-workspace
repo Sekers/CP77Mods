@@ -5,8 +5,8 @@
             "path": "../.."
         },
         {
-            "name": "IMZ Native Plugin",
-            "path": "native"
+            "name": "Improved Minimap Zoom",
+            "path": "."
         }
     ]
 }
