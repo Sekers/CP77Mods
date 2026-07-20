@@ -46,10 +46,10 @@ The offset research (how the live-radius address was found, and how to find more
 
 ## Packaging a release zip
 
-After building the native plugin, run from this folder:
+After building the native plugin, run from this folder (requires [PowerShell](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell)):
 
 ```text
-powershell -ExecutionPolicy Bypass -File "Make-Release-Zip.ps1"
+pwsh.exe -ExecutionPolicy Bypass -File "Make-Release-Zip.ps1"
 ```
 
 Output: `releases\Improved Minimap Zoom 1.7.7-HotFix2-Native.zip`
