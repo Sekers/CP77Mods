@@ -1,1 +1,5 @@
 *.reds text eol=lf
+*.xl  text eol=lf
+*.xml text eol=lf
+
+*.archive binary
