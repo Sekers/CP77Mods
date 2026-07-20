@@ -7,7 +7,7 @@ Community-maintained hotfixes for [Improved Minimap Zoom](https://www.nexusmods.
 | Release | Branch | What it is |
 | --- | --- | --- |
 | `ImprovedMinimapZoom-1.7.7-HotFix1` | `fix-minimap-1.7.7` | Pure-redscript fixes: vehicle-exit crash, peek hotkey two-step zoom. No new requirements. The hotfix release is a complete package; uninstall other versions of IMZ before installing. |
-| `ImprovedMinimapZoom-1.7.7-HotFix2-Native` | `fix-minimap-1.7.7-native` | Everything in HotFix1, plus a small bundled RED4ext plugin that reads the minimap's live zoom from memory — making the peek hotkey exact everywhere — and instant apply of settings changes. Adds a RED4ext 1.15.0 requirement (which was already needed for the required dependency mods). The hotfix release is a complete package; uninstall other versions of IMZ before installing. |
+| `ImprovedMinimapZoom-1.7.7-HotFix2` | `fix-minimap-1.7.7-native` | Everything in HotFix1, plus a small bundled RED4ext plugin that reads the minimap's live zoom from memory — making the peek hotkey exact everywhere — and instant apply of settings changes. Adds a RED4ext 1.15.0 requirement (which was already needed for the required dependency mods). The hotfix release is a complete package; uninstall other versions of IMZ before installing. |
 
 ## What was fixed
 
