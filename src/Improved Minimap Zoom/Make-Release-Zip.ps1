@@ -1,4 +1,4 @@
-$version = "1.7.7-HotFix2-Native"
+$version = "1.7.7-HotFix2"
 $zipName = "Improved Minimap Zoom $version.zip"
 $releasesDir = Join-Path $PSScriptRoot "releases"
 $zipPath = Join-Path $releasesDir $zipName
