@@ -44,6 +44,16 @@ The RED4ext.SDK is fetched automatically at configure time, pinned to the 1.63-H
 
 The offset research (how the live-radius address was found, and how to find more) is documented in [`native/RESEARCH.md`](native/RESEARCH.md).
 
+## Packaging a release zip
+
+After building the native plugin, run from this folder:
+
+```text
+powershell -ExecutionPolicy Bypass -File "Make-Release-Zip.ps1"
+```
+
+Output: `releases\Improved Minimap Zoom 1.7.7-HotFix2-Native.zip`
+
 ## Requirements (HotFix2)
 
 - Cyberpunk 2077 **1.63 Legacy** with **1.63 Hotfix 1** (not 2.x)
