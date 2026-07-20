@@ -3,9 +3,9 @@
         {
             "name": "Win32",
             "includePath": [
-                "${workspaceFolder}",
-                "${workspaceFolder}/Plugins",
-                "${workspaceFolder}/build/_deps/red4extsdk-src/include"
+                "${workspaceFolder}/native",
+                "${workspaceFolder}/native/Plugins",
+                "${workspaceFolder}/native/build/_deps/red4extsdk-src/include"
             ],
             "defines": [
                 "_WINDOWS",
