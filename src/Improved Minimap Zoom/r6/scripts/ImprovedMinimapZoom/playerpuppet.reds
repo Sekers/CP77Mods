@@ -3,6 +3,7 @@ import ImprovedMinimapUtil.IMZLog
 
 public class RestorePlayerZoneEvent extends Event {
   public let realZone: Int32;
+  public let fakedZone: Int32;
   public let restoreBuckets: Bool;
 }
 
@@ -13,6 +14,13 @@ public let imzJustUnmounted: Bool;
 
 @addField(PlayerPuppet)
 public let imzRefreshPending: Bool;
+
+// Set when a restoreBucketsAfter request arrives while a refresh is already
+// pending: the request is coalesced away, but the flatten it was meant to
+// undo (OnAction writes the buckets BEFORE requesting the refresh) must
+// still be restored when the pending window closes
+@addField(PlayerPuppet)
+public let imzPendingRestoreBuckets: Bool;
 
 @addField(PlayerPuppet)
 public let imzMinimapController: wref<MinimapContainerController>;
@@ -39,8 +47,14 @@ public func ForceMinimapRefreshWithFakeZone(opt restoreBucketsAfter: Bool) -> Vo
   };
 
   // DEBOUNCE:
-  // If a refresh is already queued, coalesce requests
+  // If a refresh is already queued, coalesce requests — but carry the
+  // bucket-restore obligation over to the pending window, otherwise a peek
+  // arriving here leaves the buckets flattened (its flatten already happened
+  // in OnAction) with nothing scheduled to restore them
   if this.imzRefreshPending {
+    if restoreBucketsAfter {
+      this.imzPendingRestoreBuckets = true;
+    };
     IMZLog("Fake zone refresh already pending — coalescing");
     return;
   };
@@ -60,6 +74,7 @@ public func ForceMinimapRefreshWithFakeZone(opt restoreBucketsAfter: Bool) -> Vo
 
   let event: ref<RestorePlayerZoneEvent> = new RestorePlayerZoneEvent();
   event.realZone = realZone;
+  event.fakedZone = fakedZone;
   event.restoreBuckets = restoreBucketsAfter;
 
   // Peek swaps (restoreBucketsAfter) use a short window that must still span
@@ -77,17 +92,28 @@ public func ForceMinimapRefreshWithFakeZone(opt restoreBucketsAfter: Bool) -> Vo
 @addMethod(PlayerPuppet)
 protected cb func OnRestorePlayerZoneEvent(evt: ref<RestorePlayerZoneEvent>) -> Bool {
   // Peek path: put per-zone values back BEFORE the state flips, so the engine's
-  // restore recompute reads the correct value for the bucket it actually uses
-  if evt.restoreBuckets && IsDefined(this.imzMinimapController) {
+  // restore recompute reads the correct value for the bucket it actually uses.
+  // imzPendingRestoreBuckets covers restore requests that were coalesced away
+  // while this refresh was pending.
+  if (evt.restoreBuckets || this.imzPendingRestoreBuckets) && IsDefined(this.imzMinimapController) {
     this.imzMinimapController.UpdateZoomValuesOnly_IMZ();
   };
+  this.imzPendingRestoreBuckets = false;
 
-  this.GetPlayerStateMachineBlackboard()
-    .SetInt(GetAllBlackboardDefs().PlayerStateMachine.Zones, evt.realZone, false);
+  // Only write the stashed zone back if the blackboard still holds our faked
+  // value. If a REAL zone change won the race during the fake window (likely
+  // at doorways: Public->Safe shop entries etc.), writing the stale zone
+  // would clobber it for every system reading PSM Zones.
+  let currentZone: Int32 = this.GetPlayerStateMachineBlackboard().GetInt(GetAllBlackboardDefs().PlayerStateMachine.Zones);
+  if currentZone == evt.fakedZone {
+    this.GetPlayerStateMachineBlackboard()
+      .SetInt(GetAllBlackboardDefs().PlayerStateMachine.Zones, evt.realZone, false);
+    IMZLog(s"Restore with real zone \(evt.realZone) bucketsRestored=\(evt.restoreBuckets)");
+  } else {
+    IMZLog(s"Skip zone restore: real zone changed to \(currentZone) during fake window");
+  };
 
   this.imzRefreshPending = false;
-
-  IMZLog(s"Restore with real zone \(evt.realZone) bucketsRestored=\(evt.restoreBuckets)");
   return true;
 }
 

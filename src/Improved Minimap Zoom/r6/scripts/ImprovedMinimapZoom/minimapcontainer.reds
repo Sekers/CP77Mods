@@ -15,8 +15,16 @@ public class ForceIMZExteriorRefreshEvent extends Event {}
 
 @addMethod(PlayerPuppet)
 protected cb func OnForceIMZExteriorRefreshEvent(evt: ref<ForceIMZExteriorRefreshEvent>) -> Bool {
-  // This calls ForceMinimapRefreshWithFakeZone(), which will only work once imzJustUnmounted is cleared.
-  this.ForceMinimapRefreshWithFakeZone();
+  // Fires 0.35s after unmount, once imzJustUnmounted is cleared. Restore
+  // per-bucket values BEFORE refreshing: the exit path flattened all buckets
+  // to the exterior value for the immediate visual, and leaving them flat
+  // would kill interior/combat/security zoom until the next peek or
+  // settings-close. SetPreconfiguredZoomValues_IMZ ends with the refresh.
+  if IsDefined(this.imzMinimapController) {
+    this.imzMinimapController.SetPreconfiguredZoomValues_IMZ();
+  } else {
+    this.ForceMinimapRefreshWithFakeZone();
+  };
   return true;
 }
 
