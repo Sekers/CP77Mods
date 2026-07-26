@@ -104,6 +104,13 @@ public let imzPeekPressTime: Float;
 @addField(MinimapContainerController)
 public let imzIsActuallyMounted: Bool;
 
+// Whether peek is usable in the vehicle currently mounted — snapshotted at
+// mount because hack #3 (the IsPlayerMounted reset that makes the refresh work
+// in vehicles) is decided there. Reading the live config instead would let a
+// mid-drive settings change disagree with what hack #3 actually did.
+@addField(MinimapContainerController)
+public let imzVehiclePeekAllowed: Bool;
+
 
 // Methods
 
@@ -116,8 +123,11 @@ public func UpdateZoom_IMZ() -> Void {
 
 @addMethod(MinimapContainerController)
 protected cb func OnSpeedValueChanged_IMZ(speed: Float) -> Bool {
-  if this.imzConfig.isDynamicZoomEnabled && !this.imzPeekActive {
-    let newZoom: Float = ZoomCalc.GetForSpeed(speed, this.imzConfig);
+  if this.imzConfig.isDynamicZoomEnabled {
+    // Peek while driving rides the dynamic zoom: speed updates keep flowing
+    // with the peek amount added on top
+    let peekOffset: Float = this.imzPeekActive ? this.imzConfig.peek : 0.0;
+    let newZoom: Float = ZoomCalc.GetForSpeed(speed, this.imzConfig) + peekOffset;
     IMZLog("New zoom available: " + ToString(newZoom));
 
     // Vehicle dynamic zoom must snap + force refresh (no per-frame tick in vanilla redscript)
@@ -127,6 +137,12 @@ protected cb func OnSpeedValueChanged_IMZ(speed: Float) -> Bool {
         this.imzTargetZoom = newZoom;
         this.HackAllZoomValues_IMZ(newZoom);
       };
+      return true;
+    };
+
+    // On-foot peek owns the zoom (live-radius waypoints) — stray speed events
+    // must not stomp it
+    if this.imzPeekActive {
       return true;
     };
 
@@ -150,10 +166,18 @@ protected cb func OnActualMountedStateChanged_IMZ(value: Bool) -> Bool {
   IMZLog("! OnActualMountedStateChanged " + ToString(value));
   this.imzIsActuallyMounted = value;
 
-  // Vehicle enter detected — apply initial vehicle zoom immediately (even at 0 speed)
+  // Vehicle enter detected — apply initial vehicle zoom immediately (even at 0 speed).
+  // A toggle-latched peek carries in only where vehicle peek is available:
+  // otherwise the peek key is inert in vehicles and an applied offset could
+  // never be released until exiting
   if value && IsDefined(this.imzPlayer) {
+    // Snapshot what hack #3 just decided for this mount (same synchronous
+    // block: OnMountingEvent sets IsMounted_IMZ immediately before its check)
+    this.imzVehiclePeekAllowed = this.VehiclePeekEnabled_IMZ();
+
     let speed: Float = this.imzBlackboard.GetFloat(GetAllBlackboardDefs().UI_System.CurrentSpeed_IMZ);
-    let newZoom: Float = ZoomCalc.GetForSpeed(speed, this.imzConfig);
+    let peekOffset: Float = this.imzPeekActive && this.imzVehiclePeekAllowed ? this.imzConfig.peek : 0.0;
+    let newZoom: Float = ZoomCalc.GetForSpeed(speed, this.imzConfig) + peekOffset;
 
     this.imzCurrentZoom = newZoom;
     this.imzTargetZoom = newZoom;
@@ -195,6 +219,9 @@ func InitBBs_IMZ(playerGameObject: ref<GameObject>) -> Void {
   this.imzIsActuallyMountedCallback = this.imzBlackboard.RegisterListenerBool(GetAllBlackboardDefs().UI_System.IsMounted_IMZ, this, n"OnActualMountedStateChanged_IMZ");
 
   this.imzIsActuallyMounted = this.imzBlackboard.GetBool(GetAllBlackboardDefs().UI_System.IsMounted_IMZ);
+  // Config-based seed for the case where the player is already mounted at
+  // attach (save loaded in a vehicle) and no mount event replays
+  this.imzVehiclePeekAllowed = this.VehiclePeekEnabled_IMZ();
 
   // Store reference to this controller on the player so events can access it
   this.imzPlayer.imzMinimapController = this;
@@ -205,6 +232,15 @@ public func ClearBBs_IMZ() -> Void {
   this.imzBlackboard.UnregisterListenerFloat(GetAllBlackboardDefs().UI_System.CurrentSpeed_IMZ, this.imzSpeedTrackCallback);
   this.imzIsMountedBlackboard.UnregisterListenerBool(GetAllBlackboardDefs().UI_ActiveVehicleData.IsPlayerMounted, this.imzIsMountedCallback);
   this.imzBlackboard.UnregisterListenerBool(GetAllBlackboardDefs().UI_System.IsMounted_IMZ, this.imzIsActuallyMountedCallback);
+}
+
+// Vehicle peek needs hack #3's IsPlayerMounted reset at mount (fired for
+// dynamic zoom or the static-peek opt-in) — without it the zone-flip refresh
+// is inert in vehicles. Config-based like the mount-time gate, so a settings
+// change applies on the next vehicle entry.
+@addMethod(MinimapContainerController)
+public func VehiclePeekEnabled_IMZ() -> Bool {
+  return this.imzConfig.isDynamicZoomEnabled || this.imzConfig.staticVehiclePeek;
 }
 
 // Returns the visionRadius value the game will use for the given zone
@@ -241,6 +277,11 @@ public func GetZoomForZone_IMZ(zone: Int32) -> Float {
 public func GetPeekFlattenValue_IMZ(zone: Int32, combat: Int32) -> Float {
   let peekOffset: Float = this.imzPeekActive ? this.imzConfig.peek : 0.0;
   let result: Float = this.imzConfig.exterior + peekOffset;
+  // Driving: the base is the speed-derived zoom, not a zone bucket
+  if this.imzIsActuallyMounted {
+    let speed: Float = this.imzBlackboard.GetFloat(GetAllBlackboardDefs().UI_System.CurrentSpeed_IMZ);
+    return ZoomCalc.GetForSpeed(speed, this.imzConfig) + peekOffset;
+  };
   if combat == 1 {
     result = this.imzConfig.combat + peekOffset;
     return result;
@@ -356,8 +397,12 @@ protected cb func OnAction(action: ListenerAction, consumer: ListenerActionConsu
   let actionName: CName = ListenerAction.GetName(action);
   if Equals(actionName, IMZAction()) {
 
-    // Manual peek should not work while driving
-    if this.imzIsActuallyMounted {
+    // Peek while driving needs hack #3's IsPlayerMounted reset (dynamic zoom
+    // or the static-peek opt-in): without it the engine ignores the zone-flip
+    // refresh in vehicles — the press would change nothing on screen.
+    // Uses the mount-time snapshot, not the live config: a settings change
+    // made mid-drive cannot retroactively fire hack #3 for this vehicle
+    if this.imzIsActuallyMounted && !this.imzVehiclePeekAllowed {
       return false;
     };
 
@@ -404,6 +449,18 @@ protected cb func OnAction(action: ListenerAction, consumer: ListenerActionConsu
       } else {
         this.imzTargetZoom = this.GetPeekFlattenValue_IMZ(this.imzPlayer.GetRealZone_IMZ(), this.imzPlayer.GetRealCombat_IMZ());
       };
+
+      // Driving: apply via the dynamic-zoom pattern — flatten to the waypoint
+      // and refresh WITHOUT the per-bucket restore. The on-foot restore would
+      // land the engine on a zone/interior config bucket, overriding the
+      // speed-based value until the next speed update arrived.
+      if this.imzIsActuallyMounted {
+        this.imzCurrentZoom = this.imzTargetZoom;
+        IMZLog(s"PEEK (vehicle) active=\(this.imzPeekActive) target=\(this.imzTargetZoom)");
+        this.HackAllZoomValues_IMZ(this.imzTargetZoom);
+        return true;
+      };
+
       this.SetAllZoomsToCurrentValue_IMZ(this.imzTargetZoom);
       this.imzCurrentZoom = this.imzTargetZoom;
 

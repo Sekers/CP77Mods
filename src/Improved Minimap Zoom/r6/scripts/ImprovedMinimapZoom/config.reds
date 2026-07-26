@@ -19,7 +19,7 @@ public class ZoomConfig {
   @runtimeProperty("ModSettings.category", "Mod-IMZ-Static")
   @runtimeProperty("ModSettings.displayName", "Mod-IMZ-Combat")
   @runtimeProperty("ModSettings.description", "Mod-IMZ-Combat-Desc")
-  @runtimeProperty("ModSettings.step", "5")
+  @runtimeProperty("ModSettings.step", "1")
   @runtimeProperty("ModSettings.min", "20")
   @runtimeProperty("ModSettings.max", "200")
   let combat: Float = 60;
@@ -29,7 +29,7 @@ public class ZoomConfig {
   @runtimeProperty("ModSettings.category", "Mod-IMZ-Static")
   @runtimeProperty("ModSettings.displayName", "Mod-IMZ-Quest")
   @runtimeProperty("ModSettings.description", "Mod-IMZ-Quest-Desc")
-  @runtimeProperty("ModSettings.step", "5")
+  @runtimeProperty("ModSettings.step", "1")
   @runtimeProperty("ModSettings.min", "20")
   @runtimeProperty("ModSettings.max", "200")
   let questArea: Float = 40;
@@ -39,7 +39,7 @@ public class ZoomConfig {
   @runtimeProperty("ModSettings.category", "Mod-IMZ-Static")
   @runtimeProperty("ModSettings.displayName", "Mod-IMZ-Security")
   @runtimeProperty("ModSettings.description", "Mod-IMZ-Security-Desc")
-  @runtimeProperty("ModSettings.step", "5")
+  @runtimeProperty("ModSettings.step", "1")
   @runtimeProperty("ModSettings.min", "20")
   @runtimeProperty("ModSettings.max", "200")
   let securityArea: Float = 60;
@@ -49,7 +49,7 @@ public class ZoomConfig {
   @runtimeProperty("ModSettings.category", "Mod-IMZ-Static")
   @runtimeProperty("ModSettings.displayName", "Mod-IMZ-Interior")
   @runtimeProperty("ModSettings.description", "Mod-IMZ-Interior-Desc")
-  @runtimeProperty("ModSettings.step", "5")
+  @runtimeProperty("ModSettings.step", "1")
   @runtimeProperty("ModSettings.min", "20")
   @runtimeProperty("ModSettings.max", "200")
   let interior: Float = 40;
@@ -60,7 +60,7 @@ public class ZoomConfig {
   @runtimeProperty("ModSettings.category", "Mod-IMZ-Static")
   @runtimeProperty("ModSettings.displayName", "Mod-IMZ-Exterior")
   @runtimeProperty("ModSettings.description", "Mod-IMZ-Exterior-Desc")
-  @runtimeProperty("ModSettings.step", "5")
+  @runtimeProperty("ModSettings.step", "1")
   @runtimeProperty("ModSettings.min", "20")
   @runtimeProperty("ModSettings.max", "200")
   let exterior: Float = 60;
@@ -72,8 +72,8 @@ public class ZoomConfig {
   @runtimeProperty("ModSettings.category", "Mod-IMZ-Peek-Hotkey")
   @runtimeProperty("ModSettings.displayName", "Mod-IMZ-Peek-Increment")
   @runtimeProperty("ModSettings.description", "Mod-IMZ-Peek-Increment-Desc")
-  @runtimeProperty("ModSettings.step", "5")
-  @runtimeProperty("ModSettings.min", "20")
+  @runtimeProperty("ModSettings.step", "1")
+  @runtimeProperty("ModSettings.min", "5")
   @runtimeProperty("ModSettings.max", "200")
   let peek: Float = 40;
 
@@ -85,6 +85,17 @@ public class ZoomConfig {
   @runtimeProperty("ModSettings.displayName", "Mod-IMZ-Peek-Toggleable")
   @runtimeProperty("ModSettings.description", "Mod-IMZ-Peek-Toggleable-Desc")
   let replaceHoldWithToggle: Bool = false;
+
+  // Allows the peek hotkey in vehicles when dynamic vehicle zoom is disabled,
+  // at the cost of the vanilla vehicle-mode minimap shift (the same trade-off
+  // dynamic zoom makes). Decided at vehicle entry.
+  // Label/description are plain strings on purpose: Mod Settings renders them
+  // as-is when they are not localization keys, so no archive edits are needed.
+  @runtimeProperty("ModSettings.mod", "IZoom")
+  @runtimeProperty("ModSettings.category", "Mod-IMZ-Peek-Hotkey")
+  @runtimeProperty("ModSettings.displayName", "Vehicle peek when no dynamic zoom")
+  @runtimeProperty("ModSettings.description", "Lets the peek hotkey work in vehicles when dynamic vehicle zoom is off. Trade-off: prevents the player marker downward minimap shift. Applies on your next vehicle entry.")
+  let staticVehiclePeek: Bool = false;
 
   // -- VEHICLE MINIMAP CONFIG --
 
@@ -104,7 +115,7 @@ public class ZoomConfig {
   @runtimeProperty("ModSettings.category", "Mod-IMZ-Max-Dynamic")
   @runtimeProperty("ModSettings.displayName", "Mod-IMZ-Min-Zoom")
   @runtimeProperty("ModSettings.description", "Mod-IMZ-Min-Zoom-Desc")
-  @runtimeProperty("ModSettings.step", "5")
+  @runtimeProperty("ModSettings.step", "1")
   @runtimeProperty("ModSettings.min", "20")
   @runtimeProperty("ModSettings.max", "200")
   let minZoom: Float = 80;
@@ -114,7 +125,7 @@ public class ZoomConfig {
   @runtimeProperty("ModSettings.category", "Mod-IMZ-Max-Dynamic")
   @runtimeProperty("ModSettings.displayName", "Mod-IMZ-Min-Speed")
   @runtimeProperty("ModSettings.description", "Mod-IMZ-Min-Speed-Desc")
-  @runtimeProperty("ModSettings.step", "5")
+  @runtimeProperty("ModSettings.step", "1")
   @runtimeProperty("ModSettings.min", "20")
   @runtimeProperty("ModSettings.max", "200")
   let minSpeed: Float = 20;
@@ -124,7 +135,7 @@ public class ZoomConfig {
   @runtimeProperty("ModSettings.category", "Mod-IMZ-Max-Dynamic")
   @runtimeProperty("ModSettings.displayName", "Mod-IMZ-Max-Zoom")
   @runtimeProperty("ModSettings.description", "Mod-IMZ-Max-Zoom-Desc")
-  @runtimeProperty("ModSettings.step", "5")
+  @runtimeProperty("ModSettings.step", "1")
   @runtimeProperty("ModSettings.min", "20")
   @runtimeProperty("ModSettings.max", "200")
   let maxZoom: Float = 140;
@@ -134,7 +145,7 @@ public class ZoomConfig {
   @runtimeProperty("ModSettings.category", "Mod-IMZ-Max-Dynamic")
   @runtimeProperty("ModSettings.displayName", "Mod-IMZ-Max-Speed")
   @runtimeProperty("ModSettings.description", "Mod-IMZ-Max-Speed-Desc")
-  @runtimeProperty("ModSettings.step", "5")
+  @runtimeProperty("ModSettings.step", "1")
   @runtimeProperty("ModSettings.min", "20")
   @runtimeProperty("ModSettings.max", "200")
   let maxSpeed: Float = 120;

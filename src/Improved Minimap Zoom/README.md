@@ -6,23 +6,24 @@ Community-maintained hotfixes for [Improved Minimap Zoom](https://www.nexusmods.
 
 | Release | Branch | What it is |
 | --- | --- | --- |
-| `ImprovedMinimapZoom-1.7.7-HotFix1` | `fix-minimap-1.7.7` | Pure-redscript fixes: vehicle-exit crash, peek hotkey two-step zoom. No new requirements. The hotfix release is a complete package; uninstall other versions of IMZ before installing. |
-| `ImprovedMinimapZoom-1.7.7-HotFix2` | `fix-minimap-1.7.7-native` | Everything in HotFix1, plus a small bundled RED4ext plugin that reads the minimap's live zoom from memory, making the peek hotkey exact everywhere, and instant apply of settings changes. Adds a RED4ext 1.15.0 requirement (which was already needed for the required dependency mods). Also includes 3 additional minor fixes listed below. The hotfix release is a complete package; uninstall other versions of IMZ before installing. |
+| `Improved-Minimap-Zoom-1.7.7-HF1` | `fix-minimap-1.7.7-HF1` | Pure-redscript fixes: vehicle-exit crash, peek hotkey two-step zoom. No new requirements. The hotfix release is a complete package; uninstall other versions of IMZ before installing. |
+| `Improved-Minimap-Zoom-1.7.7-HF2` | `fix-minimap-1.7.7-HF2-Native` | Everything in HotFix1, plus a small bundled RED4ext plugin that reads the minimap's live zoom from memory, making the peek hotkey exact everywhere. Also adds peek while driving, finer settings sliders, instant apply of settings changes, and 3 minor fixes (all listed below). The hotfix release is a complete package; uninstall other versions of IMZ before installing. |
 
 ## What was added or fixed in HF2
 
 - **Peek exactness**: the waypoint now comes from the minimap's *actual displayed* radius (read natively), removing the last visible artifacts near building entrances and in quest areas, plus a release clamp for rapid double-taps.
+- **Peek while driving**: the peek hotkey now also works in vehicles, zooming out on top of the vehicle zoom and returning on release. It is always available when dynamic vehicle zoom is enabled. When dynamic zoom is off the mod keeps the vanilla vehicle-mode minimap downward shift by default, which is incompatible with peek. You can enable the new **Vehicle peek when no dynamic zoom** setting to trade the shift for peek support.
+- **Finer settings sliders**: all zoom and speed sliders move in steps of 1 (was 5), and the peek increment can go as low as 5 (was 20).
 - **Instant settings**: zoom settings apply the moment the Mod Settings menu closes.
 - **Interior zoom dead after driving** (regression introduced in HotFix1): exiting a vehicle left all per-state zoom values flattened to the Exterior value, so interior/combat/security-area zoom stopped applying until the next peek or settings change. The delayed post-unmount refresh now restores the per-state values first.
-- **Zone-restore race**: the mod refreshes the minimap by briefly faking the player's security zone and restoring it ~0.1s later. If a *real* zone change happened inside that window (e.g. stepping into a shop the instant a refresh fired), the restore overwrote it with a stale value — visible to every game system that reads the player zone. The restore is now skipped when the zone changed underneath it.
-- **Peek during a pending refresh left zoom flattened** (latent since HotFix1's refresh debounce): pressing the peek hotkey while another minimap refresh was in flight (e.g. right after exiting a vehicle or closing the settings menu) dropped the peek's bucket-restore step, leaving all per-state zoom values flattened — with toggle-mode peek, indefinitely. Coalesced requests now carry the restore obligation over to the pending refresh.
+- **Zone-restore race**: the mod refreshes the minimap by briefly faking the player's security zone and restoring it ~0.1s later. If a *real* zone change happened inside that window (e.g. stepping into a shop the instant a refresh fired), the restore overwrote it with a stale value and that was visible to every game system that reads the player zone. The restore is now skipped when the zone changed underneath it.
+- **Peek during a pending refresh left zoom flattened** (latent since HotFix1's refresh debounce): pressing the peek hotkey while another minimap refresh was in flight (e.g. right after exiting a vehicle or closing the settings menu) dropped the peek's bucket-restore step, leaving all per-state zoom values flattened. Toggle-mode peek would stay there indefinitely. Coalesced requests now carry the restore obligation over to the pending refresh.
 
 ## Known limitations (engine constraints)
 
-- The peek hotkey has no effect during active combat (the minimap refresh trigger is inert while combat controls the zoom — also true of the original 1.7.7).
-- The peek hotkey is disabled while driving (never functional in the original either).
-- With dynamic vehicle zoom enabled, the vanilla vehicle-mode minimap shift (marker pushed down) is suppressed — the two features are fundamentally incompatible in this engine version (see the author's original notes; verified by testing).
-- Entering an interior can show a brief minimap blip (most visible on the yellow route line): the engine switches from the Exterior to the Interior zoom value as a single instant snap right at the doorway, simultaneously with the interior map mode, and the route line re-fits during that repaint. This is inherent to how 1.63 recomputes minimap zoom (no interpolation), has existed since the original 1.7.7, and gets more visible the further apart the Interior and Exterior settings are — keeping them closer together reduces it. (Investigated in depth for HotFix2 via native live-radius sampling but any found fix would have caused worse side effects elsewhere)
+- The peek hotkey has no effect during active combat (the minimap refresh trigger is inert while combat controls the zoom; also true of the original 1.7.7).
+- In a vehicle, the vanilla game shifts the minimap so your marker sits lower and you see more of the road ahead. That shift is incompatible with both dynamic vehicle zoom and peek-while-driving. Dynamic vehicle zoom always turns it off. With dynamic zoom off, the **Vehicle peek when no dynamic zoom** setting decides which one you get.
+- Entering an interior can show a brief minimap blip (most visible on the yellow route line): the engine switches from the Exterior to the Interior zoom value as a single instant snap right at the doorway, simultaneously with the interior map mode, and the route line re-fits during that repaint. This is inherent to how 1.63 recomputes minimap zoom (no interpolation), has existed since the original 1.7.7, and gets more visible the further apart the Interior and Exterior settings are (keeping them closer together reduces it).
 
 ## Folder layout
 
@@ -30,7 +31,7 @@ Community-maintained hotfixes for [Improved Minimap Zoom](https://www.nexusmods.
 archive/   game resources (.archive + ArchiveXL manifest)
 r6/        redscript sources + Input Loader hotkey mapping
 native/    RED4ext plugin source (CMake, C++20, MSVC x64) — see native/RESEARCH.md
-releases/  built release zips + notes (not tracked as releases; see GitHub releases)
+releases/  built release zips
 ```
 
 Open `Improved Minimap Zoom.code-workspace` in VS Code to get both the repo and the native plugin configured (C++ IntelliSense activates for `native/` once the project has been configured at least once).
@@ -42,7 +43,7 @@ cmake -S native -B native/build -G "Visual Studio 17 2022" -A x64
 cmake --build native/build --config Release
 ```
 
-The RED4ext.SDK is fetched automatically at configure time, pinned to the 1.63-HF1 commit of [Sekers/RED4ext.SDK](https://github.com/Sekers/RED4ext.SDK) (`046877f9`). Output: `native/build/bin/ImprovedMinimapZoom_Native.dll` (also published to `native/Module/red4ext/plugins/ImprovedMinimapZoom/`). The dll ships only inside release zips — it is never committed to the repository.
+The RED4ext.SDK is fetched automatically at configure time, pinned to the 1.63-HF1 commit of [Sekers/RED4ext.SDK](https://github.com/Sekers/RED4ext.SDK) (`046877f9`). Output: `native/build/bin/ImprovedMinimapZoom_Native.dll` (also published to `native/Module/red4ext/plugins/ImprovedMinimapZoom/`). The dll ships only inside release zips; it is never committed to the repository.
 
 The offset research (how the live-radius address was found, and how to find more) is documented in [`native/RESEARCH.md`](native/RESEARCH.md).
 
