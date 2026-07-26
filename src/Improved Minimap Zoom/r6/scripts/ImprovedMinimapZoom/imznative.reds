@@ -3,8 +3,8 @@
 // without it these declarations fail script validation at game start.
 //
 // IMZ_GetMinimapRadius returns the minimap vision radius currently displayed
-// on screen (the engine's interpolated value, not the target), read from
-// native memory that 1.63 does not expose through RTTI. Returns -1.0 when the
+// on screen (the value being drawn right now, not the target the buckets hold),
+// read from native memory that 1.63 does not expose through RTTI. Returns -1.0 when the
 // value cannot be read — treat any result <= 0 as unavailable.
 //
 // The plugin also registers a research-only native, IMZ_DumpMinimapMemory,

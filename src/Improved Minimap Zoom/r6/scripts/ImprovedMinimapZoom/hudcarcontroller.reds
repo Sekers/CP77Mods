@@ -12,17 +12,26 @@ let m_config: ref<ZoomConfig>;
 
 @wrapMethod(hudCarController)
 protected cb func OnPlayerAttach(playerPuppet: ref<GameObject>) -> Bool {
-  wrappedMethod(playerPuppet);
+  // Init BEFORE the wrapped call: when a save is loaded while mounted, vanilla
+  // OnPlayerAttach ends with Reset(), which calls OnSpeedValueChanged(0.0)
+  // synchronously — our wrap of that would then run with both fields null
   let puppet: ref<PlayerPuppet> = playerPuppet as PlayerPuppet;
   if IsDefined(puppet) {
     this.m_config = new ZoomConfig();
     this.m_UIBlackboard_IMZ = GameInstance.GetBlackboardSystem(puppet.GetGame()).Get(GetAllBlackboardDefs().UI_System);
   };
+  wrappedMethod(playerPuppet);
 }
 
 @wrapMethod(hudCarController)
 protected cb func OnSpeedValueChanged(speedValue: Float) -> Bool {
   wrappedMethod(speedValue);
+
+  // m_activeVehicle is NULL between a non-silent unmount and the next mount;
+  // the config/blackboard are unset until OnPlayerAttach ran with a PlayerPuppet
+  if !IsDefined(this.m_activeVehicle) || !IsDefined(this.m_config) || !IsDefined(this.m_UIBlackboard_IMZ) {
+    return true;
+  };
 
   let resultingValue: Float;
   let m: Float;
@@ -31,7 +40,8 @@ protected cb func OnSpeedValueChanged(speedValue: Float) -> Bool {
     m = GameInstance.GetStatsDataSystem(this.m_activeVehicle.GetGame()).GetValueFromCurve(n"vehicle_ui", speedValue, n"speed_to_multiplier");
     resultingValue = ZoomCalc.RoundTo05(speedValue * m);
     this.m_UIBlackboard_IMZ.SetFloat(GetAllBlackboardDefs().UI_System.CurrentSpeed_IMZ, resultingValue);
-  }
+  };
+  return true;
 }
 
 @addMethod(hudCarController)

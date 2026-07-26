@@ -13,7 +13,7 @@ set `RED4EXT_SDK_DIR` to use a local checkout instead).
 
 | Offset | What | Source |
 |--------|------|--------|
-| `0x338` | **Live (displayed, interpolated) vision radius** — the value on screen right now | discovered via memory probe (below) |
+| `0x338` | **Live (displayed) vision radius** — the value on screen right now | discovered via memory probe (below) |
 | `0x360` | `visionRadiusVehicle` (Float) | RTTI (reflected) |
 | `0x364` | `visionRadiusCombat` (Float) | RTTI |
 | `0x368` | `visionRadiusQuestArea` (Float) | RTTI |

@@ -21,6 +21,13 @@ protected cb func OnForceIMZExteriorRefreshEvent(evt: ref<ForceIMZExteriorRefres
   // would kill interior/combat/security zoom until the next peek or
   // settings-close. SetPreconfiguredZoomValues_IMZ ends with the refresh.
   if IsDefined(this.imzMinimapController) {
+    // Re-mounting inside the 0.35s window makes this stale: the vehicle path
+    // owns the buckets again, and per-state values here would replace the
+    // speed-based flatten with visionRadiusVehicle until the next speed update
+    if this.imzMinimapController.imzIsActuallyMounted {
+      IMZLog("Skipped post-unmount refresh (re-mounted during the window)");
+      return true;
+    };
     this.imzMinimapController.SetPreconfiguredZoomValues_IMZ();
   } else {
     this.ForceMinimapRefreshWithFakeZone();
@@ -123,6 +130,15 @@ public func UpdateZoom_IMZ() -> Void {
 
 @addMethod(MinimapContainerController)
 protected cb func OnSpeedValueChanged_IMZ(speed: Float) -> Bool {
+  // Speed updates are meaningless on foot, and applying one would flatten every
+  // bucket (ApplyZoom_IMZ) with nothing scheduled to restore them — the zoom
+  // would stay wrong until the next peek, settings change or mount. Reachable
+  // after a SILENT unmount: vanilla hudCarController only unregisters its speed
+  // listener when !silentUnmount, so it keeps pushing speed while on foot.
+  if !this.imzIsActuallyMounted {
+    return true;
+  };
+
   if this.imzConfig.isDynamicZoomEnabled {
     // Peek while driving rides the dynamic zoom: speed updates keep flowing
     // with the peek amount added on top
@@ -131,25 +147,10 @@ protected cb func OnSpeedValueChanged_IMZ(speed: Float) -> Bool {
     IMZLog("New zoom available: " + ToString(newZoom));
 
     // Vehicle dynamic zoom must snap + force refresh (no per-frame tick in vanilla redscript)
-    if this.imzIsActuallyMounted {
-      if NotEquals(this.imzCurrentZoom, newZoom) && IsDefined(this.imzPlayer) {
-        this.imzCurrentZoom = newZoom;
-        this.imzTargetZoom = newZoom;
-        this.HackAllZoomValues_IMZ(newZoom);
-      };
-      return true;
-    };
-
-    // On-foot peek owns the zoom (live-radius waypoints) — stray speed events
-    // must not stomp it
-    if this.imzPeekActive {
-      return true;
-    };
-
-    // On-foot: update target and apply without rebuild
-    if NotEquals(this.imzTargetZoom, newZoom) && IsDefined(this.imzPlayer) {
+    if NotEquals(this.imzCurrentZoom, newZoom) && IsDefined(this.imzPlayer) {
+      this.imzCurrentZoom = newZoom;
       this.imzTargetZoom = newZoom;
-      this.UpdateZoom_IMZ();
+      this.HackAllZoomValues_IMZ(newZoom);
     };
   };
   return true;
@@ -336,7 +337,7 @@ public func SetPreconfiguredZoomValues_IMZ() -> Void {
   this.visionRadiusInterior = this.imzConfig.interior + peek;
   this.visionRadiusExterior = this.imzConfig.exterior + peek;
 
-  IMZLog(s"Zooms: \(this.imzConfig.minZoom) \(this.imzConfig.combat + peek) \(this.imzConfig.questArea + peek) \(this.imzConfig.securityArea) \(this.imzConfig.interior) \(this.imzConfig.exterior)");
+  IMZLog(s"Zooms: \(this.imzConfig.minZoom) \(this.imzConfig.combat + peek) \(this.imzConfig.questArea + peek) \(this.imzConfig.securityArea + peek) \(this.imzConfig.interior + peek) \(this.imzConfig.exterior + peek)");
 
   // Still required to force minimap rebuild on true zone/state changes
   this.imzPlayer.ForceMinimapRefreshWithFakeZone();
@@ -403,6 +404,14 @@ protected cb func OnAction(action: ListenerAction, consumer: ListenerActionConsu
     // Uses the mount-time snapshot, not the live config: a settings change
     // made mid-drive cannot retroactively fire hack #3 for this vehicle
     if this.imzIsActuallyMounted && !this.imzVehiclePeekAllowed {
+      // A hold started ON FOOT must still be able to end in here, or the flag
+      // latches with no key held and the unmount restore writes a phantom
+      // +peek into every bucket. No visual work: the buckets are
+      // vehicle-flattened anyway and SetPreconfiguredZoomValues_IMZ at unmount
+      // reads the cleared flag.
+      if !this.imzConfig.replaceHoldWithToggle && Equals(ListenerAction.GetType(action), gameinputActionType.BUTTON_RELEASED) {
+        this.imzPeekActive = false;
+      };
       return false;
     };
 
@@ -479,14 +488,57 @@ protected cb func OnAction(action: ListenerAction, consumer: ListenerActionConsu
 
 @addMethod(MinimapContainerController)
 protected cb func OnRefreshZoomConfigsEvent(evt: ref<RefreshZoomConfigsEvent>) -> Void {
+  let previous: ref<ZoomConfig> = this.imzConfig;
+  // Always adopt the new config: the behavior flags (dynamic zoom, toggle mode,
+  // static vehicle peek) matter even when no zoom VALUE moved
   this.imzConfig = new ZoomConfig();
 
-  // Apply the (possibly changed) settings to the minimap immediately so the
-  // displayed zoom never sits on stale values. Without this, the first peek
-  // after a settings change reads the stale displayed radius and visibly
-  // re-aims mid-motion once. Skipped while driving: dynamic zoom owns the
-  // buckets there and rewrites them on every speed update anyway.
-  if !this.imzIsActuallyMounted && IsDefined(this.imzPlayer) {
+  // Apply the changed settings to the minimap immediately so the displayed zoom
+  // never sits on stale values. Without this, the first peek after a settings
+  // change reads the stale displayed radius and visibly re-aims mid-motion
+  // once. Skipped while driving: dynamic zoom owns the buckets there and
+  // rewrites them on every speed update anyway.
+  if this.imzIsActuallyMounted || !IsDefined(this.imzPlayer) {
+    return;
+  };
+
+  // This event fires on EVERY pause-menu close, not just when a setting
+  // changed. A refresh costs a zone flip, and the flip runs the minimap
+  // through the other display mode for ~0.1s — so do nothing at all unless a
+  // value we actually write has moved.
+  if !this.ZoomValuesChanged_IMZ(previous, this.imzConfig) {
+    return;
+  };
+
+  // Neutralize the flip window the way peek does: flatten every bucket to the
+  // live displayed radius so the mode detour has no zoom consequence, and let
+  // the restore handler write the NEW per-bucket values back before the zone
+  // flips home. The engine's restore recompute then lands on the new setting
+  // in one clean transition. Fall back to the plain path if the native
+  // live-radius read is unavailable.
+  let liveZoom: Float = IMZ_GetMinimapRadius(this);
+  if liveZoom > 0.0 {
+    this.SetAllZoomsToCurrentValue_IMZ(liveZoom);
+    this.imzCurrentZoom = liveZoom;
+    this.imzTargetZoom = liveZoom;
+    this.imzPlayer.ForceMinimapRefresh_IMZ();
+  } else {
     this.SetPreconfiguredZoomValues_IMZ();
   };
+}
+
+// True when a setting this controller actually writes into the visionRadius*
+// buckets has changed — the behavior flags are deliberately excluded, they
+// need no minimap refresh
+@addMethod(MinimapContainerController)
+private func ZoomValuesChanged_IMZ(a: ref<ZoomConfig>, b: ref<ZoomConfig>) -> Bool {
+  if !IsDefined(a) || !IsDefined(b) { return true; };
+  if NotEquals(a.minZoom, b.minZoom) { return true; };
+  if NotEquals(a.combat, b.combat) { return true; };
+  if NotEquals(a.questArea, b.questArea) { return true; };
+  if NotEquals(a.securityArea, b.securityArea) { return true; };
+  if NotEquals(a.interior, b.interior) { return true; };
+  if NotEquals(a.exterior, b.exterior) { return true; };
+  if NotEquals(a.peek, b.peek) { return true; };
+  return false;
 }

@@ -7,7 +7,7 @@ Community-maintained hotfixes for [Improved Minimap Zoom](https://www.nexusmods.
 | Release | Branch | What it is |
 | --- | --- | --- |
 | `Improved-Minimap-Zoom-1.7.7-HF1` | `fix-minimap-1.7.7-HF1` | Pure-redscript fixes: vehicle-exit crash, peek hotkey two-step zoom. No new requirements. The hotfix release is a complete package; uninstall other versions of IMZ before installing. |
-| `Improved-Minimap-Zoom-1.7.7-HF2` | `fix-minimap-1.7.7-HF2-Native` | Everything in HotFix1, plus a small bundled RED4ext plugin that reads the minimap's live zoom from memory, making the peek hotkey exact everywhere. Also adds peek while driving, finer settings sliders, instant apply of settings changes, and 3 minor fixes (all listed below). The hotfix release is a complete package; uninstall other versions of IMZ before installing. |
+| `Improved-Minimap-Zoom-1.7.7-HF2` | `fix-minimap-1.7.7-HF2-Native` | Everything in HotFix1, plus a small bundled RED4ext plugin that reads the minimap's live zoom from memory, making the peek hotkey exact everywhere. Also adds peek while driving, finer settings sliders, instant apply of settings changes, and a set of smaller fixes (all listed below). The hotfix release is a complete package; uninstall other versions of IMZ before installing. |
 
 ## What was added or fixed in HF2
 
@@ -18,6 +18,10 @@ Community-maintained hotfixes for [Improved Minimap Zoom](https://www.nexusmods.
 - **Interior zoom dead after driving** (regression introduced in HotFix1): exiting a vehicle left all per-state zoom values flattened to the Exterior value, so interior/combat/security-area zoom stopped applying until the next peek or settings change. The delayed post-unmount refresh now restores the per-state values first.
 - **Zone-restore race**: the mod refreshes the minimap by briefly faking the player's security zone and restoring it ~0.1s later. If a *real* zone change happened inside that window (e.g. stepping into a shop the instant a refresh fired), the restore overwrote it with a stale value and that was visible to every game system that reads the player zone. The restore is now skipped when the zone changed underneath it.
 - **Peek during a pending refresh left zoom flattened** (latent since HotFix1's refresh debounce): pressing the peek hotkey while another minimap refresh was in flight (e.g. right after exiting a vehicle or closing the settings menu) dropped the peek's bucket-restore step, leaving all per-state zoom values flattened. Toggle-mode peek would stay there indefinitely. Coalesced requests now carry the restore obligation over to the pending refresh.
+- **Loading a save while sitting in a vehicle** (present since the original 1.7.7): the mod read its settings after letting the game finish attaching, but the game pushes a speed update during that attach, so the mod's handler ran against uninitialised state and threw a script error. Setup now happens first.
+- **Peek could stay stuck on after a vehicle ride** (hold mode, present since the original 1.7.7): if you were holding the peek key as you got into a vehicle that does not support peek and let go while driving, the release was ignored and the zoom stayed peeked after you got out. The release is now always registered.
+- **Stray vehicle speed updates while on foot** flattened all per-state zoom values with nothing to restore them, which could leave interior/combat/security zoom stuck at a vehicle zoom level. Only reachable when the game removed you from a vehicle without a normal exit (some quest scenes). Speed updates are now ignored unless you are actually in a vehicle.
+- **Closing the pause menu no longer disturbs the minimap**: the settings refresh now runs only when a zoom value actually changed, and when it does it uses the same neutralised transition as the peek hotkey.
 
 ## Known limitations (engine constraints)
 
