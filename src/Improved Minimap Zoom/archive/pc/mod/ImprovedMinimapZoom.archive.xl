@@ -11,3 +11,10 @@ localization:
     jp-jp: base\localization\jp-jp\onscreens\imz.json
     de-de: base\localization\de-de\onscreens\imz.json
     es-es: base\localization\es-es\onscreens\imz.json
+    es-mx: base\localization\es-es\onscreens\imz.json
+    pl-pl: base\localization\en-us\onscreens\imz.json
+    pt-br: base\localization\en-us\onscreens\imz.json
+    kr-kr: base\localization\en-us\onscreens\imz.json
+    hu-hu: base\localization\en-us\onscreens\imz.json
+    th-th: base\localization\en-us\onscreens\imz.json
+    tr-tr: base\localization\en-us\onscreens\imz.json

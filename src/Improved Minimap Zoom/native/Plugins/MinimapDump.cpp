@@ -41,11 +41,13 @@ namespace
 
     constexpr const char* kMinimapClassName = "gameuiMinimapContainerController";
 
-    // Offset of the live (displayed, interpolated) vision radius inside
+    // Offset of the live (currently displayed) vision radius inside
     // gameuiMinimapContainerController for game 1.63 Hotfix 1. Located via the
-    // memory probe (IMZ_DumpMinimapMemory): it trails the visionRadius* bucket
-    // writes mid-lerp while driving, and at peek press/release it still holds
-    // the on-screen value after the buckets already hold the new target. It
+    // memory probe (IMZ_DumpMinimapMemory): it lags the visionRadius* bucket
+    // writes, so at peek press/release it still holds the on-screen value
+    // after the buckets already hold the new target. Note 1.63 does NOT
+    // interpolate this value; a 0.1s sampler showed only clean sub-100ms
+    // snaps between exact bucket values, never an intermediate one. It
     // sits in the unreflected native gap (0x280..0x35F) just before the six
     // reflected visionRadius* floats at 0x360..0x374. The game version is
     // frozen, so this offset never changes.

@@ -5,7 +5,10 @@
         <action name="imzPeek" map="imzPeek_Button" />
     </context>
 
-    <context name="UIShared" append="true">
+    <!-- UIExploration, not UIShared: both reach gameplay and every vehicle
+         context, but UIShared is also pulled in by UIMenuShared, which made the
+         peek key fire inside the map/inventory/pause menus. -->
+    <context name="UIExploration" append="true">
         <include name="ImprovedMinimapZoomContext" />
     </context>
 
