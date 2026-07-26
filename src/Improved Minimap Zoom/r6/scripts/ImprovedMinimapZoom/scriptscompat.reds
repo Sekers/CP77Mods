@@ -7,6 +7,11 @@ public class RefreshZoomConfigsEvent extends Event {}
 
 @wrapMethod(PauseMenuBackgroundGameController)
 protected cb func OnUninitialize() -> Bool {
-  GameInstance.GetUISystem(this.GetPlayerControlledObject().GetGame()).QueueEvent(new RefreshZoomConfigsEvent());
+  // The controlled object can already be gone when this fires as part of a
+  // session teardown (quit to main menu), and there is nothing to refresh then
+  let player: ref<GameObject> = this.GetPlayerControlledObject();
+  if IsDefined(player) {
+    GameInstance.GetUISystem(player.GetGame()).QueueEvent(new RefreshZoomConfigsEvent());
+  };
   wrappedMethod();
 }

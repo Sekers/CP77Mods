@@ -37,8 +37,12 @@ protected cb func OnSpeedValueChanged(speedValue: Float) -> Bool {
   let m: Float;
   // Push speed value update if dynamic zoom enabled
   if this.m_config.isDynamicZoomEnabled {
-    m = GameInstance.GetStatsDataSystem(this.m_activeVehicle.GetGame()).GetValueFromCurve(n"vehicle_ui", speedValue, n"speed_to_multiplier");
-    resultingValue = ZoomCalc.RoundTo05(speedValue * m);
+    // Absolute speed, like vanilla does before its own curve lookup: reversing
+    // reports a negative value, which fed the curve out of range and pinned
+    // the zoom at MinZoom no matter how fast you backed up
+    let speed: Float = AbsF(speedValue);
+    m = GameInstance.GetStatsDataSystem(this.m_activeVehicle.GetGame()).GetValueFromCurve(n"vehicle_ui", speed, n"speed_to_multiplier");
+    resultingValue = ZoomCalc.RoundTo05(speed * m);
     this.m_UIBlackboard_IMZ.SetFloat(GetAllBlackboardDefs().UI_System.CurrentSpeed_IMZ, resultingValue);
   };
   return true;

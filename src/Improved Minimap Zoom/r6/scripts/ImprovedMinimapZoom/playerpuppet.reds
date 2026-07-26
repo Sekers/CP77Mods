@@ -95,7 +95,13 @@ protected cb func OnRestorePlayerZoneEvent(evt: ref<RestorePlayerZoneEvent>) -> 
   // restore recompute reads the correct value for the bucket it actually uses.
   // imzPendingRestoreBuckets covers restore requests that were coalesced away
   // while this refresh was pending.
-  if (evt.restoreBuckets || this.imzPendingRestoreBuckets) && IsDefined(this.imzMinimapController) {
+  // Never while mounted: these are ON-FOOT values, and the vehicle path owns
+  // the buckets. Reachable by pressing peek just before entering a vehicle —
+  // the restore would then replace the speed-based flatten with the on-foot
+  // config values until the next speed update arrived.
+  if (evt.restoreBuckets || this.imzPendingRestoreBuckets)
+      && IsDefined(this.imzMinimapController)
+      && !this.imzMinimapController.imzIsActuallyMounted {
     this.imzMinimapController.UpdateZoomValuesOnly_IMZ();
   };
   this.imzPendingRestoreBuckets = false;
