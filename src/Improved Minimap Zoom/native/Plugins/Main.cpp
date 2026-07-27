@@ -45,10 +45,13 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::PluginInfo* aInfo)
     aInfo->name    = L"ImprovedMinimapZoom_Native";
     aInfo->author  = L"Legacy2077";
     aInfo->version = RED4EXT_SEMVER(0,2,0);
-    // Runtime-independent like RED4.RTTIDumper: the SDK checkout's
-    // RED4EXT_RUNTIME_LATEST resolves to a post-1.63 patch, which makes
-    // RED4ext 1.15.0 refuse to load the plugin on 1.63 Hotfix 1.
-    aInfo->runtime = RED4EXT_RUNTIME_INDEPENDENT;
+    // Pinned to the only runtime this plugin can be correct on: it reads a
+    // hardcoded unreflected offset (0x338) valid for 1.63 Hotfix 1, so it must
+    // fail closed anywhere else rather than read arbitrary memory.
+    // NOT RED4EXT_RUNTIME_LATEST: that resolves to a post-1.63 patch in this
+    // SDK checkout, which made RED4ext 1.15.0 refuse to load the plugin on
+    // 1.63 HF1. The explicit constant is a different thing and loads fine.
+    aInfo->runtime = RED4EXT_RUNTIME_1_63_HOTFIX_1;
     aInfo->sdk     = RED4EXT_SDK_LATEST;
 }
 

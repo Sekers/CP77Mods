@@ -55,6 +55,66 @@ namespace
     // in the project root.
     constexpr uint32_t kCurrentRadiusOffset = 0x338;
 
+    // Landmarks the 0x338 offset was derived from. 0x338 is unreflected, so
+    // nothing about it can be validated directly; these two reflected facts are
+    // the closest available proxy for "this really is the class layout the
+    // research was done against". Verified once, then cached.
+    constexpr uint32_t kExpectedClassSize = 0x488;
+    constexpr uint32_t kVehicleRadiusOffset = 0x360;
+    constexpr const char* kVehicleRadiusProp = "visionRadiusVehicle";
+
+    // Reflected properties are split across TWO collections: `props` holds the
+    // class's own, `unk118` additionally holds native-only entries. The
+    // visionRadius* fields are native-only (the script side declares them
+    // `native let` because they exist in the engine, not the script bundle), so
+    // searching `props` alone would never find them. See RESEARCH.md.
+    RED4ext::CProperty* FindReflectedProp(RED4ext::CClass* aCls, const char* aName)
+    {
+        const RED4ext::CName want(aName);
+        for (auto prop : aCls->props)
+        {
+            if (prop && prop->name == want)
+                return prop;
+        }
+        for (auto prop : aCls->unk118)
+        {
+            if (prop && prop->name == want)
+                return prop;
+        }
+        return nullptr;
+    }
+
+    // Confirms the live class matches the layout kCurrentRadiusOffset assumes.
+    // Runtime, not compile time: RTTI sizes and property offsets only exist
+    // once the game has loaded, so they cannot be static_assert-ed.
+    bool MinimapLayoutMatches(RED4ext::CClass* aCls)
+    {
+        if (aCls->size != kExpectedClassSize)
+        {
+            Log::Error("Minimap layout check FAILED: class size 0x%X, expected 0x%X. Live radius disabled.",
+                       aCls->size, kExpectedClassSize);
+            return false;
+        }
+
+        auto prop = FindReflectedProp(aCls, kVehicleRadiusProp);
+        if (!prop)
+        {
+            Log::Error("Minimap layout check FAILED: %s not found in props or nativeProps. Live radius disabled.",
+                       kVehicleRadiusProp);
+            return false;
+        }
+        if (prop->valueOffset != kVehicleRadiusOffset)
+        {
+            Log::Error("Minimap layout check FAILED: %s at 0x%X, expected 0x%X. Live radius disabled.",
+                       kVehicleRadiusProp, prop->valueOffset, kVehicleRadiusOffset);
+            return false;
+        }
+
+        Log::Info("Minimap layout check passed: size 0x%X, %s at 0x%X.", aCls->size, kVehicleRadiusProp,
+                  prop->valueOffset);
+        return true;
+    }
+
     std::mutex g_mutex;
     bool g_initialized = false;
     uint32_t g_dumpBytes = 0;
@@ -227,7 +287,18 @@ static void IMZ_GetMinimapRadius(RED4ext::IScriptable* aContext, RED4ext::CStack
         auto rtti = RED4ext::CRTTISystem::Get();
         auto minimapCls = rtti ? rtti->GetClass(kMinimapClassName) : nullptr;
         auto cls = ctrl->GetType();
-        if (cls && minimapCls && cls->IsA(minimapCls) && minimapCls->size >= kCurrentRadiusOffset + sizeof(float))
+
+        // Validate the layout once. Cached because this runs on every peek
+        // press, and because a failure is permanent for the session.
+        static bool s_layoutChecked = false;
+        static bool s_layoutOk = false;
+        if (minimapCls && !s_layoutChecked)
+        {
+            s_layoutChecked = true;
+            s_layoutOk = MinimapLayoutMatches(minimapCls);
+        }
+
+        if (s_layoutOk && cls && minimapCls && cls->IsA(minimapCls))
         {
             float v;
             std::memcpy(&v, reinterpret_cast<const uint8_t*>(ctrl.GetPtr()) + kCurrentRadiusOffset, sizeof(v));
