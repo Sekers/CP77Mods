@@ -11,10 +11,17 @@ import ImprovedMinimapUtil.*
 
 // -- Events
 
-public class ForceIMZExteriorRefreshEvent extends Event {}
+public class ForceIMZExteriorRefreshEvent extends Event {
+  public let generation: Int32;
+}
 
 @addMethod(PlayerPuppet)
 protected cb func OnForceIMZExteriorRefreshEvent(evt: ref<ForceIMZExteriorRefreshEvent>) -> Bool {
+  // Stale: a mount transition happened after this was queued
+  if evt.generation != this.imzMountGeneration {
+    IMZLog("Ignored stale post-unmount refresh from an earlier mount generation");
+    return true;
+  };
   // Fires 0.35s after unmount, once imzJustUnmounted is cleared. The exit path
   // flattened all buckets to the exterior value for the immediate visual, and
   // leaving them flat would kill interior/combat/security zoom until the next
@@ -173,6 +180,11 @@ protected cb func OnActualMountedStateChanged_IMZ(value: Bool) -> Bool {
   // otherwise the peek key is inert in vehicles and an applied offset could
   // never be released until exiting
   if value && IsDefined(this.imzPlayer) {
+    // Invalidates any post-unmount events still in flight from the exit that
+    // preceded this mount, and clears imzJustUnmounted synchronously so the
+    // discarded clear event is not the only thing that would have done it
+    this.imzPlayer.BumpMountGeneration_IMZ();
+
     // Snapshot what hack #3 just decided for this mount (same synchronous
     // block: OnMountingEvent sets IsMounted_IMZ immediately before its check)
     this.imzVehiclePeekAllowed = this.VehiclePeekEnabled_IMZ();
@@ -189,10 +201,15 @@ protected cb func OnActualMountedStateChanged_IMZ(value: Bool) -> Bool {
 
   // Vehicle exit detected — mark post-unmount window
   if !value && IsDefined(this.imzPlayer) {
+    // Bump first: this exit's own delayed events must carry the new generation,
+    // and any left over from a previous cycle are invalidated here
+    this.imzPlayer.BumpMountGeneration_IMZ();
     this.imzPlayer.imzJustUnmounted = true;
 
+    let clearEvt: ref<ClearIMZUnmountFlagEvent> = new ClearIMZUnmountFlagEvent();
+    clearEvt.generation = this.imzPlayer.imzMountGeneration;
     GameInstance.GetDelaySystem(this.imzPlayer.GetGame())
-      .DelayEvent(this.imzPlayer, new ClearIMZUnmountFlagEvent(), 0.3);
+      .DelayEvent(this.imzPlayer, clearEvt, 0.3);
 
     // Update configured zoom values (this will NOT refresh during the unmount window due to the guard)
     this.SetPreconfiguredZoomValues_IMZ();
@@ -203,8 +220,10 @@ protected cb func OnActualMountedStateChanged_IMZ(value: Bool) -> Bool {
     this.UpdateZoom_IMZ();
 
     // Critical: refresh AFTER the unmount window clears, otherwise ForceMinimapRefreshWithFakeZone() is skipped
+    let refreshEvt: ref<ForceIMZExteriorRefreshEvent> = new ForceIMZExteriorRefreshEvent();
+    refreshEvt.generation = this.imzPlayer.imzMountGeneration;
     GameInstance.GetDelaySystem(this.imzPlayer.GetGame())
-      .DelayEvent(this.imzPlayer, new ForceIMZExteriorRefreshEvent(), 0.35);
+      .DelayEvent(this.imzPlayer, refreshEvt, 0.35);
   };
 
   return true;
@@ -229,15 +248,32 @@ func InitBBs_IMZ(playerGameObject: ref<GameObject>) -> Void {
   this.imzPlayer.imzMinimapController = this;
 }
 
+// Each listener is torn down on its own terms. The previous all-or-nothing
+// guard meant one undefined blackboard leaked every registration, including
+// ones that were made successfully.
 @addMethod(MinimapContainerController)
 public func ClearBBs_IMZ() -> Void {
-  // Attach bails out before InitBBs_IMZ when the object is not a PlayerPuppet
-  if !IsDefined(this.imzBlackboard) || !IsDefined(this.imzIsMountedBlackboard) {
-    return;
+  // Handles are nulled as they are released so a second teardown is a no-op
+  // rather than an unregister against a dead handle
+  if IsDefined(this.imzBlackboard) && IsDefined(this.imzSpeedTrackCallback) {
+    this.imzBlackboard.UnregisterListenerFloat(GetAllBlackboardDefs().UI_System.CurrentSpeed_IMZ, this.imzSpeedTrackCallback);
+    this.imzSpeedTrackCallback = null;
   };
-  this.imzBlackboard.UnregisterListenerFloat(GetAllBlackboardDefs().UI_System.CurrentSpeed_IMZ, this.imzSpeedTrackCallback);
-  this.imzIsMountedBlackboard.UnregisterListenerBool(GetAllBlackboardDefs().UI_ActiveVehicleData.IsPlayerMounted, this.imzIsMountedCallback);
-  this.imzBlackboard.UnregisterListenerBool(GetAllBlackboardDefs().UI_System.IsMounted_IMZ, this.imzIsActuallyMountedCallback);
+  if IsDefined(this.imzIsMountedBlackboard) && IsDefined(this.imzIsMountedCallback) {
+    this.imzIsMountedBlackboard.UnregisterListenerBool(GetAllBlackboardDefs().UI_ActiveVehicleData.IsPlayerMounted, this.imzIsMountedCallback);
+    this.imzIsMountedCallback = null;
+  };
+  if IsDefined(this.imzBlackboard) && IsDefined(this.imzIsActuallyMountedCallback) {
+    this.imzBlackboard.UnregisterListenerBool(GetAllBlackboardDefs().UI_System.IsMounted_IMZ, this.imzIsActuallyMountedCallback);
+    this.imzIsActuallyMountedCallback = null;
+  };
+
+  // Only disown the back reference if it still points here. A newer controller
+  // may already have claimed it, and wiping that would strand every event that
+  // dispatches through the player.
+  if IsDefined(this.imzPlayer) && Equals(this.imzPlayer.imzMinimapController, this) {
+    this.imzPlayer.imzMinimapController = null;
+  };
 }
 
 // Vehicle peek needs hack #3's IsPlayerMounted reset at mount (fired for
@@ -403,6 +439,9 @@ protected cb func OnPlayerAttach(playerGameObject: ref<GameObject>) -> Bool {
 
   this.InitBBs_IMZ(playerGameObject);
   this.imzPeekActive = false;
+  // Fresh attach: invalidate anything still queued and clear the post-unmount
+  // flag, so a stale one can never suppress refreshes for the whole session
+  this.imzPlayer.BumpMountGeneration_IMZ();
   this.SetPreconfiguredZoomValues_IMZ();
 
   // Seed from the actual displayed zoom (exact); fall back to the zone-based
@@ -430,6 +469,11 @@ protected cb func OnPlayerAttach(playerGameObject: ref<GameObject>) -> Bool {
 @wrapMethod(MinimapContainerController)
 protected cb func OnPlayerDetach(playerGameObject: ref<GameObject>) -> Bool {
   wrappedMethod(playerGameObject);
+  // Matches the RegisterInputListener in OnPlayerAttach, which previously had
+  // no counterpart
+  if IsDefined(playerGameObject) {
+    playerGameObject.UnregisterInputListener(this);
+  };
   this.ClearBBs_IMZ();
   return true;
 }
@@ -539,24 +583,51 @@ protected cb func OnRefreshZoomConfigsEvent(evt: ref<RefreshZoomConfigsEvent>) -
     return;
   };
 
+  // Switching between hold and toggle while a peek is active would strand the
+  // flag: a hold-mode peek has no release left to arrive once the key is no
+  // longer held, and a toggle-mode one has no press. Drop it and let the
+  // per-bucket write below land without the offset.
+  // Deliberately not conditioned on the dynamic-zoom or static-peek settings:
+  // availability belongs to imzVehiclePeekAllowed, snapshotted at mount, and
+  // reading those live is what caused the phantom-peek bug.
+  let peekCleared: Bool = false;
+  if this.imzPeekActive && NotEquals(previous.replaceHoldWithToggle, this.imzConfig.replaceHoldWithToggle) {
+    IMZLog("Peek cleared: hold/toggle mode changed while active");
+    this.imzPeekActive = false;
+    peekCleared = true;
+  };
+
   // This event fires on EVERY pause-menu close, not just when a setting
   // changed. A refresh costs a zone flip, and the flip runs the minimap
   // through the other display mode for ~0.1s — so do nothing at all unless a
   // value we actually write has moved.
-  if !this.ZoomValuesChanged_IMZ(previous, this.imzConfig) {
+  // peekCleared forces it through regardless: ZoomValuesChanged_IMZ compares
+  // only zoom VALUES, so flipping hold/toggle alone would return here and leave
+  // the peek offset on screen with imzPeekActive already false, i.e. released
+  // in state but not visually.
+  if !peekCleared && !this.ZoomValuesChanged_IMZ(previous, this.imzConfig) {
     return;
   };
 
-  // Driving: dynamic zoom owns the buckets and rewrites them on every speed
-  // update, so the change lands on its own. With dynamic zoom OFF no speed
-  // updates flow at all, so write the new vehicle value here or it would wait
-  // until the next unmount. The repaint only lands when hack #3 fired for this
-  // mount (dynamic zoom or the static-peek opt-in); without it the buckets are
-  // at least correct for the next rebuild the engine does on its own.
+  // Driving: with dynamic zoom ON the buckets are rewritten on every speed
+  // update, so an ordinary value change lands on its own. Two cases still have
+  // to be written here.
+  // With dynamic zoom OFF no speed updates flow at all, so a change would
+  // otherwise wait until the next unmount.
+  // A cleared peek must be released immediately even with dynamic zoom ON,
+  // because CurrentSpeed_IMZ only signals on change: parked, no speed update
+  // ever arrives, and the offset would stay on screen until the player drove
+  // off despite imzPeekActive already being false.
+  // The repaint only lands when hack #3 fired for this mount (dynamic zoom or
+  // the static-peek opt-in); without it the buckets are at least correct for
+  // the next rebuild the engine does on its own.
   if this.imzIsActuallyMounted {
-    if !this.imzConfig.isDynamicZoomEnabled {
+    if !this.imzConfig.isDynamicZoomEnabled || peekCleared {
       let vehiclePeek: Float = this.imzPeekActive && this.imzVehiclePeekAllowed ? this.imzConfig.peek : 0.0;
-      this.imzCurrentZoom = this.imzConfig.minZoom + vehiclePeek;
+      let speed: Float = this.imzBlackboard.GetFloat(GetAllBlackboardDefs().UI_System.CurrentSpeed_IMZ);
+      // GetForSpeed returns minZoom outright when dynamic zoom is off, so this
+      // covers both cases without branching on the setting twice
+      this.imzCurrentZoom = ZoomCalc.GetForSpeed(speed, this.imzConfig) + vehiclePeek;
       this.imzTargetZoom = this.imzCurrentZoom;
       this.HackAllZoomValues_IMZ(this.imzCurrentZoom);
     };

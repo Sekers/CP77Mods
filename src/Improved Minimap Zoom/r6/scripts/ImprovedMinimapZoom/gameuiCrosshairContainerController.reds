@@ -45,6 +45,8 @@ protected final func UnregisterPSMListeners(playerPuppet: ref<GameObject>) -> Vo
     // bbVehicleInfo = this.GetBlackboardSystem().Get(GetAllBlackboardDefs().UI_ActiveVehicleData);
     // bbVehicleInfo.UnregisterDelayedListener(GetAllBlackboardDefs().UI_ActiveVehicleData.IsPlayerMounted, this.m_isMountedBlackboardId);
     bbVehicleInfo = this.GetBlackboardSystem().Get(GetAllBlackboardDefs().UI_System);
-    bbVehicleInfo.UnregisterDelayedListener(GetAllBlackboardDefs().UI_System.IsMounted_IMZ, this.m_isMountedBlackboardId);
+    // Must match the RegisterListenerBool above: the delayed variant does not
+    // release a non-delayed registration, so this listener used to leak
+    bbVehicleInfo.UnregisterListenerBool(GetAllBlackboardDefs().UI_System.IsMounted_IMZ, this.m_isMountedBlackboardId);
   };
 }

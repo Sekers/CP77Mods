@@ -7,13 +7,25 @@ public class RestorePlayerZoneEvent extends Event {
   public let restoreBuckets: Bool;
 }
 
-public class ClearIMZUnmountFlagEvent extends Event {}
+// Post-unmount events carry the mount generation they were queued under, so a
+// later mount can discard the ones left over from an earlier unmount.
+// Deliberately NOT applied to RestorePlayerZoneEvent: that event owns the
+// cleanup that un-fakes the zone and clears imzRefreshPending, and dropping one
+// would leave the blackboard faked and every later refresh coalesced away.
+public class ClearIMZUnmountFlagEvent extends Event {
+  public let generation: Int32;
+}
 
 @addField(PlayerPuppet)
 public let imzJustUnmounted: Bool;
 
 @addField(PlayerPuppet)
 public let imzRefreshPending: Bool;
+
+// Bumped on every mount transition and at controller attach. Delayed
+// post-unmount events stamped with an older value are stale and ignored.
+@addField(PlayerPuppet)
+public let imzMountGeneration: Int32;
 
 // Set when a restoreBucketsAfter request arrives while a refresh is already
 // pending: the request is coalesced away, but the flatten it was meant to
@@ -30,8 +42,28 @@ public let imzMinimapController: wref<MinimapContainerController>;
 @addField(PlayerPuppet)
 public let imzLastRealZone: Int32;
 
+// Set when the game genuinely writes PlayerStateMachine.Zones while one of our
+// fake swaps is in flight. Comparing the blackboard against the faked value
+// cannot distinguish "nothing happened" from "a real change landed on exactly
+// the value we faked", so the write itself has to be observed.
 @addField(PlayerPuppet)
-public let imzLastRealCombat: Int32;
+public let imzSawRealZoneWrite: Bool;
+
+// The mod's own fake goes through IBlackboard.SetInt directly, so this wrap
+// never sees it: only genuine zone changes reach here. The four writers are
+// PlayerPuppet.OnEnter{Public,Safe,Restricted,Dangerous}Zone. Nothing writes
+// Default(1) and OnEnterUndefinedZone is empty, so four of the five zone values
+// are observable, which is enough for the doorway cases this protects.
+@wrapMethod(PlayerPuppet)
+public func SetBlackboardIntVariable(id: BlackboardID_Int, value: Int32) -> Void {
+  if this.imzRefreshPending && Equals(id, GetAllBlackboardDefs().PlayerStateMachine.Zones) {
+    this.imzSawRealZoneWrite = true;
+    // Keep the stash current too: GetRealZone_IMZ returns it for the rest of
+    // the window, so leaving it stale would hide the change from every caller
+    this.imzLastRealZone = value;
+  };
+  wrappedMethod(id, value);
+}
 
 // restoreBucketsAfter: peek path only — write per-zone values back right before
 // the real state is restored, so the engine's restore recompute lands on the
@@ -60,13 +92,13 @@ public func ForceMinimapRefreshWithFakeZone(opt restoreBucketsAfter: Bool) -> Vo
   };
 
   this.imzRefreshPending = true;
+  this.imzSawRealZoneWrite = false;
 
   let psmBB: ref<IBlackboard> = this.GetPlayerStateMachineBlackboard();
   let realZone: Int32 = psmBB.GetInt(GetAllBlackboardDefs().PlayerStateMachine.Zones);
   let fakedZone: Int32 = realZone == 3 ? 1 : 3;
 
   this.imzLastRealZone = realZone;
-  this.imzLastRealCombat = psmBB.GetInt(GetAllBlackboardDefs().PlayerStateMachine.Combat);
 
   IMZLog(s"Force minimap refresh with fake zone \(fakedZone)");
 
@@ -106,12 +138,15 @@ protected cb func OnRestorePlayerZoneEvent(evt: ref<RestorePlayerZoneEvent>) -> 
   };
   this.imzPendingRestoreBuckets = false;
 
-  // Only write the stashed zone back if the blackboard still holds our faked
-  // value. If a REAL zone change won the race during the fake window (likely
-  // at doorways: Public->Safe shop entries etc.), writing the stale zone
-  // would clobber it for every system reading PSM Zones.
+  // Never write the stashed zone back over a REAL zone change that won the race
+  // during the fake window (likely at doorways: Public->Safe shop entries etc.).
+  // The observed-write flag is the authority: the value comparison below cannot
+  // tell "untouched" from "genuinely changed to exactly the value we faked",
+  // and that case used to be clobbered silently.
   let currentZone: Int32 = this.GetPlayerStateMachineBlackboard().GetInt(GetAllBlackboardDefs().PlayerStateMachine.Zones);
-  if currentZone == evt.fakedZone {
+  if this.imzSawRealZoneWrite {
+    IMZLog(s"Skip zone restore: real zone write observed during fake window (now \(currentZone))");
+  } else if currentZone == evt.fakedZone {
     this.GetPlayerStateMachineBlackboard()
       .SetInt(GetAllBlackboardDefs().PlayerStateMachine.Zones, evt.realZone, false);
     IMZLog(s"Restore with real zone \(evt.realZone) bucketsRestored=\(evt.restoreBuckets)");
@@ -133,11 +168,10 @@ public func GetRealZone_IMZ() -> Int32 {
   return this.GetPlayerStateMachineBlackboard().GetInt(GetAllBlackboardDefs().PlayerStateMachine.Zones);
 }
 
+// Always live: the mod fakes Zones only, never Combat, so there is nothing to
+// stash and a snapshot could only ever be stale.
 @addMethod(PlayerPuppet)
 public func GetRealCombat_IMZ() -> Int32 {
-  if this.imzRefreshPending {
-    return this.imzLastRealCombat;
-  };
   return this.GetPlayerStateMachineBlackboard().GetInt(GetAllBlackboardDefs().PlayerStateMachine.Combat);
 }
 
@@ -155,6 +189,23 @@ public func ForceMinimapRefresh_IMZ() -> Void {
 
 @addMethod(PlayerPuppet)
 protected cb func OnClearIMZUnmountFlagEvent(evt: ref<ClearIMZUnmountFlagEvent>) -> Bool {
+  // Stale: a mount happened after this was queued, and that mount already
+  // cleared the flag synchronously
+  if evt.generation != this.imzMountGeneration {
+    IMZLog("Ignored stale unmount-flag clear from an earlier mount generation");
+    return true;
+  };
   this.imzJustUnmounted = false;
   return true;
+}
+
+// Called from every mount transition and from controller attach. Clearing
+// imzJustUnmounted here is what makes the generation check safe: once a newer
+// generation exists the in-flight ClearIMZUnmountFlagEvent will be discarded,
+// so the flag has to be owned by this synchronous path or it would latch true
+// and the soft guard would kill every refresh for the rest of the session.
+@addMethod(PlayerPuppet)
+public func BumpMountGeneration_IMZ() -> Void {
+  this.imzMountGeneration += 1;
+  this.imzJustUnmounted = false;
 }

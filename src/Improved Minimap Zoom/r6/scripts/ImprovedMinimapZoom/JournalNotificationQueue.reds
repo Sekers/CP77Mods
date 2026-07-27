@@ -22,3 +22,15 @@ protected cb func OnPlayerAttach(playerPuppet: ref<GameObject>) -> Bool {
   this.m_transactionSystem = GameInstance.GetTransactionSystem(playerPuppet.GetGame());
   this.m_shardTransactionListener = this.m_transactionSystem.RegisterInventoryListener(playerPuppet, shardCallback);
 }
+
+// Vanilla's OnPlayerDetach releases the journal callback and the transaction
+// listener but never the mount listener, so the registration above outlived
+// every detach. Matching non-delayed unregister, on the UI_System blackboard
+// this mod redirected it to.
+@wrapMethod(JournalNotificationQueue)
+protected cb func OnPlayerDetach(playerPuppet: ref<GameObject>) -> Bool {
+  if IsDefined(this.m_UIBlackboard_IMZ) && IsDefined(this.m_mountBBConnectionId) {
+    this.m_UIBlackboard_IMZ.UnregisterListenerBool(GetAllBlackboardDefs().UI_System.IsMounted_IMZ, this.m_mountBBConnectionId);
+  };
+  wrappedMethod(playerPuppet);
+}
