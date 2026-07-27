@@ -42,13 +42,13 @@ $items = @(
     @{ Source = (Join-Path $PSScriptRoot "archive"); Dest = "archive" }
     @{ Source = (Join-Path $PSScriptRoot "r6");      Dest = "r6" }
     @{ Source = $dllPath;  Dest = "red4ext\plugins\ImprovedMinimapZoom\ImprovedMinimapZoom_Native.dll" }
-    @{ Source = (Join-Path $PSScriptRoot "README.md"); Dest = "Improved Minimap Zoom README.md" }
+    @{ Source = (Join-Path $PSScriptRoot "README.md"); Dest = "red4ext\plugins\ImprovedMinimapZoom\README.md" }
     # Mod-local, not the repo root LICENSE: this one names all three copyright
     # holders (Kovrik for the derived scripts, Legacy2077 for the hotfix work and
     # the plugin, Octavian Dima for the header-only SDK compiled into it), which
     # is what MIT requires when distributing modified copies and a binary built
     # from MIT headers.
-    @{ Source = (Join-Path $PSScriptRoot "LICENSE.txt"); Dest = "LICENSE.txt" }
+    @{ Source = (Join-Path $PSScriptRoot "LICENSE.txt"); Dest = "red4ext\plugins\ImprovedMinimapZoom\LICENSE.txt" }
 )
 foreach ($item in $items) {
     if (-not (Test-Path $item.Source)) { throw "Allowlisted item missing: $($item.Source)" }
