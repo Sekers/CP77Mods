@@ -411,6 +411,18 @@ protected cb func OnPlayerAttach(playerGameObject: ref<GameObject>) -> Bool {
   this.imzCurrentZoom = liveZoom > 0.0 ? liveZoom : this.GetZoomForZone_IMZ(this.imzPlayer.GetRealZone_IMZ());
   this.imzTargetZoom = this.imzCurrentZoom;
 
+  // Loading a save inside a vehicle gives this controller no mount event to
+  // react to, so without this the vehicle zoom is never applied and the
+  // minimap sits on the on-foot exterior value for the whole drive.
+  // Flattening every bucket makes it correct whichever one the engine selects,
+  // and the refresh coalesces with the one hack #2 just issued above.
+  if this.imzIsActuallyMounted {
+    let speed: Float = this.imzBlackboard.GetFloat(GetAllBlackboardDefs().UI_System.CurrentSpeed_IMZ);
+    this.imzCurrentZoom = ZoomCalc.GetForSpeed(speed, this.imzConfig);
+    this.imzTargetZoom = this.imzCurrentZoom;
+    this.HackAllZoomValues_IMZ(this.imzCurrentZoom);
+  };
+
   playerGameObject.RegisterInputListener(this, IMZAction());
   return true;
 }
