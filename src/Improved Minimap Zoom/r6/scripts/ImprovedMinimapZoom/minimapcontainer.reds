@@ -131,8 +131,8 @@ public func UpdateZoom_IMZ() -> Void {
 
 @addMethod(MinimapContainerController)
 protected cb func OnSpeedValueChanged_IMZ(speed: Float) -> Bool {
-  // Speed updates are meaningless on foot, and applying one would flatten every
-  // bucket (WriteAllBuckets_IMZ) with nothing scheduled to restore them — the zoom
+  // Speed updates are meaningless on foot, and applying one would flatten the
+  // on-foot buckets (WriteAllBuckets_IMZ) with nothing scheduled to restore them; the zoom
   // would stay wrong until the next peek, settings change or mount. Reachable
   // after a SILENT unmount: vanilla hudCarController only unregisters its speed
   // listener when !silentUnmount, so it keeps pushing speed while on foot.
@@ -201,14 +201,6 @@ protected cb func OnActualMountedStateChanged_IMZ(value: Bool) -> Bool {
     this.imzCurrentZoom = this.visionRadiusExterior;
     this.imzTargetZoom = this.imzCurrentZoom;
     this.UpdateZoom_IMZ();
-
-    // ...but keep the vehicle bucket usable. The engine cannot select it while
-    // unmounted, so flattening it buys nothing, and leaving it on the exterior
-    // value breaks a remount inside this window: vanilla sets IsPlayerMounted
-    // (a rebuild trigger) inside wrappedMethod, BEFORE our mount handler gets
-    // to write the vehicle zoom, so the engine would repaint the exterior
-    // value and our correction would arrive too late to be seen.
-    this.visionRadiusVehicle = this.imzConfig.minZoom;
 
     // Critical: refresh AFTER the unmount window clears, otherwise ForceMinimapRefreshWithFakeZone() is skipped
     GameInstance.GetDelaySystem(this.imzPlayer.GetGame())
@@ -310,13 +302,18 @@ public func GetPeekFlattenValue_IMZ(zone: Int32, combat: Int32) -> Float {
   return result;
 }
 
-// The ONLY place the six native zoom fields are written flat. Flattening is
-// what makes the fake-swap window invisible: the Safe<->Default flip briefly
-// runs the minimap through the other display mode, which reads a DIFFERENT
-// bucket — equal buckets make that detour have no zoom consequence.
+// The ONLY place the native zoom fields are written flat. Flattening is what
+// makes the fake-swap window invisible: the Safe<->Default flip briefly runs
+// the minimap through the other display mode, which reads a DIFFERENT bucket,
+// and equal buckets make that detour have no zoom consequence.
+// The vehicle bucket is exempt on foot; see below.
 @addMethod(MinimapContainerController)
 private func WriteAllBuckets_IMZ(value: Float) -> Void {
-  this.visionRadiusVehicle = value;
+  // The engine only selects the vehicle bucket while mounted, so flattening it
+  // on foot buys nothing and leaves a remount reading a stale on-foot value:
+  // vanilla flips IsPlayerMounted (a rebuild trigger) inside wrappedMethod,
+  // before our mount handler can write the vehicle zoom.
+  this.visionRadiusVehicle = this.imzIsActuallyMounted ? value : this.imzConfig.minZoom;
   this.visionRadiusCombat = value;
   this.visionRadiusQuestArea = value;
   this.visionRadiusSecurityArea = value;
@@ -361,8 +358,8 @@ public func SetPreconfiguredZoomValues_IMZ() -> Void {
 }
 
 // Apply the configured per-bucket values through a transition that hides the
-// Safe<->Default flip's display-mode detour: flatten every bucket to the LIVE
-// displayed radius first, then let the restore handler write the per-bucket
+// Safe<->Default flip's display-mode detour: flatten every selectable bucket to
+// the LIVE displayed radius first, then let the restore handler write the per-bucket
 // values back just BEFORE the zone flips home, so the engine's own restore
 // recompute lands on the right value for whichever bucket IT picks. Writing
 // the per-bucket values before the flip instead (SetPreconfiguredZoomValues_IMZ)
@@ -460,8 +457,9 @@ protected cb func OnAction(action: ListenerAction, consumer: ListenerActionConsu
     };
 
     if NotEquals(prevPeek, this.imzPeekActive) {
-      // Flatten ALL buckets to one waypoint value for the swap window so the
-      // mode detour during the Safe<->Default flip has no zoom consequence.
+      // Flatten every selectable bucket to one waypoint value for the swap
+      // window so the mode detour during the Safe<->Default flip has no zoom
+      // consequence.
       // The waypoint comes from the LIVE displayed radius (read from native
       // memory by the Improved Minimap Zoom Native plugin), so the motion is
       // exact everywhere — doorway strips and quest areas included. If the
