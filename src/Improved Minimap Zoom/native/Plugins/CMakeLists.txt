@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.15)
+# 3.18 is required by FetchContent_Declare's SOURCE_SUBDIR, used below
+cmake_minimum_required(VERSION 3.18)
 project(ImprovedMinimapZoomNative LANGUAGES CXX)
 
 # -----------------------
@@ -15,9 +16,26 @@ if (NOT CMAKE_CONFIGURATION_TYPES)
     endif()
 endif()
 
-# Prefer x64; allow override from CLI or GUI
-if (NOT DEFINED CMAKE_GENERATOR_PLATFORM)
-    set(CMAKE_GENERATOR_PLATFORM "x64" CACHE STRING "Generator platform")
+# Hard-fail anything but x64. The game is x64-only and the plugin reads a
+# hardcoded struct offset, so any other target could only produce a dll RED4ext
+# refuses or, worse, one that reads the wrong memory.
+#
+# Pointer size alone is not sufficient: ARM64 is also 8 bytes, so it would pass
+# a size-only check while being just as wrong. The architecture id is the part
+# that actually distinguishes them.
+#
+# There is deliberately no attempt to default CMAKE_GENERATOR_PLATFORM here.
+# It is fixed by the -A argument at first configure and setting it after
+# project() has no effect, so it can only mislead. Configure with -A x64.
+if (CMAKE_SIZEOF_VOID_P AND NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+    message(FATAL_ERROR
+        "ImprovedMinimapZoom_Native is x64-only, but this is a ${CMAKE_SIZEOF_VOID_P}-byte-pointer build. Configure with -A x64.")
+endif()
+
+if (DEFINED CMAKE_CXX_COMPILER_ARCHITECTURE_ID AND
+    NOT CMAKE_CXX_COMPILER_ARCHITECTURE_ID MATCHES "^([xX]64|AMD64|amd64)$")
+    message(FATAL_ERROR
+        "ImprovedMinimapZoom_Native is x64-only, but the compiler targets '${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}'. Configure with -A x64.")
 endif()
 
 # -----------------------
@@ -106,10 +124,19 @@ target_compile_definitions(${TARGET_NAME} PRIVATE WIN32_LEAN_AND_MEAN)
 # -----------------------
 # Output layout
 # -----------------------
+# Per-configuration output directories. Both of these previously pointed at
+# bin/, so a Debug build silently overwrote the Release dll that the packaging
+# script picks up, and nothing about the resulting zip would have looked wrong.
 set_target_properties(${TARGET_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin"
 )
+
+foreach(cfg IN ITEMS Debug Release RelWithDebInfo MinSizeRel)
+    string(TOUPPER ${cfg} cfg_upper)
+    set_target_properties(${TARGET_NAME} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY_${cfg_upper} "${CMAKE_BINARY_DIR}/bin/${cfg}"
+    )
+endforeach()
 
 set(PLUGIN_MODULE_DIR "${CMAKE_SOURCE_DIR}/Module/red4ext/plugins/${PLUGIN_NAME}" CACHE PATH "Module publish folder for plugin")
 set(BUILD_LIB_DIR "${CMAKE_BINARY_DIR}/lib")
