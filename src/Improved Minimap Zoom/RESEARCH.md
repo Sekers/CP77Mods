@@ -79,6 +79,13 @@ value for ~0.46s until the mod's own refresh completes. Two visible events with
 a gap, frequently mistaken for a double zoom transition. Any fix premised on
 "vanilla already repainted the zoom at exit" is wrong.
 
+This gap is accepted, not a defect. It is the HF1 vehicle-exit crash fix at
+work: refreshes are held off for a 0.3s post-unmount window
+(`imzJustUnmounted`), and the exterior refresh fires at 0.35s. The crash
+happened with dynamic zoom off; with the static-peek opt-in also off, that is
+exactly when hack #3 is inactive and this gap shows. Do not shorten the window
+to close the gap.
+
 ---
 
 ## 3. The dirty hacks
@@ -99,6 +106,11 @@ set. Anything gated on it must read a **mount-time snapshot**
 (`imzVehiclePeekAllowed`), never live config: settings refresh mid-drive, and a
 live read once let the gate allow peek while hack #3 had never fired for that
 mount, latching a phantom offset that applied on exit (**tested**).
+
+**Decided against:** applying a mid-drive settings change to the vanilla
+vehicle shift. It would contradict the mount-time snapshot above, and the
+shipped setting description promises the change "Applies on your next vehicle
+entry." Revisit only on request.
 
 ---
 
@@ -136,6 +148,13 @@ Because `0x338` is unreflected it cannot be validated directly. The plugin
 instead checks the two reflected landmarks it was derived from, class size
 `0x488` and `visionRadiusVehicle` at `0x360`, and disables the live read if
 either moves.
+
+With the live read unavailable, peek falls back to a config-based waypoint
+(`GetPeekFlattenValue_IMZ`) chosen from vehicle speed, combat, security zone
+and the interior flag, never `questArea`. In a quest area the waypoint is
+therefore the zone's value until the restore lands on the engine's own one, so
+peek can show a two-step motion there (**inferred** from the code). Accepted,
+not a defect: it happens only when the live read is off.
 
 ---
 
@@ -242,6 +261,8 @@ for all localization.
   falling back to the raw string when a loc key misses (**tested in game**, 4K
   and 1080p). New settings therefore need no archive or loc edits. The trade-off
   is that such a label stays English in every language.
+  The `staticVehiclePeek` setting ("Vehicle peek when no dynamic zoom") is one
+  such label; accepted.
 - Appends "(Confirmation Required)" to every description itself; nothing to do
   with the mod.
 - Has **no key-capture widget** and **no button widget**, and the 1.63 bindings
@@ -295,6 +316,10 @@ dll but inert: nothing declares or calls it, and it creates files only when
 called. First call writes `imz_props.txt` (RTTI class chain, sizes and every
 reflected property offset) and starts `imz_mem.csv` (one column per 4-byte
 offset). Read-only and bounded by the RTTI class size.
+
+**Decided against:** gating the probe behind a build flag. It is already
+unreachable, because no shipped `.reds` declares it (`imznative.reds` leaves it
+out on purpose).
 
 To use it, add temporary redscript (remove afterwards, since the declaration
 makes the plugin a hard script dependency):
@@ -368,3 +393,8 @@ packaging picks up.
 `Make-Release-Zip.ps1` builds Release itself, packages from an explicit
 allowlist, refuses a dll older than the newest file in `native\Plugins`,
 reopens the archive to hash-verify every entry, and writes a SHA-256 sidecar.
+
+The README ships in the zip and is the players' manual. Its release table,
+changelog and known limitations start from what players see and leave out
+implementation terms (buckets, zone flips, hacks, offsets). Only the folder
+layout, build and packaging sections at the end are for developers.

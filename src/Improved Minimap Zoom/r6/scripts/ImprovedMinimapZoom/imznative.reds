@@ -9,5 +9,5 @@
 //
 // The plugin also registers a research-only native, IMZ_DumpMinimapMemory,
 // which is intentionally NOT declared here: it stays inert unless research
-// wiring is added (see native/RESEARCH.md for the recipe).
+// wiring is added (see RESEARCH.md, section 9, for the recipe).
 public static native func IMZ_GetMinimapRadius(ctrl: ref<IScriptable>) -> Float
