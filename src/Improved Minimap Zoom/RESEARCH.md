@@ -298,6 +298,10 @@ game directory.**
 the CET console and in
 `bin\x64\plugins\cyber_engine_tweaks\gamelog.log`, which is readable directly.
 
+Script compile results land in `r6\logs\redscript_rCURRENT.log`, with earlier
+runs kept as dated `redscript_r<date>.log` files. CET's `DumpType` prints only
+to the console overlay, never to a file.
+
 ### Live-radius sampler
 
 The reusable pattern for anything timing-related: a self-requeuing `DelayEvent`
